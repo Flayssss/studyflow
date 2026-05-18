@@ -24,7 +24,11 @@ import {
   AlertCircle,
   Sliders,
   Check,
-  FileCheck
+  FileCheck,
+  Settings,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -42,14 +46,45 @@ import {
 } from 'recharts';
 
 // --- CONFIGURAÇÃO DA API DO GEMINI ---
-// A chave é fornecida pelo ambiente em tempo de execução
+// Mantido em branco para atender às especificações obrigatórias de injeção em ambiente de teste sandbox.
 const apiKey = "";
 
-// Função de retry com exponencial backoff para tolerância a falhas na API do Gemini
+// Função inteligente que resolve a chave de acesso correta dependendo de onde o app está rodando.
+const getActiveApiKey = (): string => {
+  if (apiKey !== "") return apiKey;
+  
+  // Se rodando na Vercel do usuário, busca no LocalStorage
+  const userKey = localStorage.getItem('studyflow_user_gemini_key');
+  if (userKey) return userKey;
+  
+  // Acesso dinâmico seguro para evitar avisos ou erros de compilação estática no alvo ES2015
+  try {
+    const globalEnv = (window as any).process?.env;
+    if (globalEnv && globalEnv.VITE_GEMINI_API_KEY) {
+      return globalEnv.VITE_GEMINI_API_KEY;
+    }
+    
+    // Avaliação indireta por função dinâmica para que o bundler não analise estaticamente o import.meta
+    const getMeta = new Function("return typeof import.meta !== 'undefined' ? import.meta : null");
+    const meta = getMeta();
+    if (meta && meta.env && meta.env.VITE_GEMINI_API_KEY) {
+      return meta.env.VITE_GEMINI_API_KEY;
+    }
+  } catch (e) {
+    // Silencioso
+  }
+  
+  return "";
+};
+
+// --- FUNÇÃO DE CONECTIVIDADE COM RETRY ---
 const fetchWithRetry = async (url: string, options: any, retries = 5, delay = 1000): Promise<any> => {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error("Erro 403 (Acesso Proibido). Por favor, verifique se a sua chave API do Gemini está configurada corretamente nas Configurações da IA no menu superior.");
+      }
       throw new Error(`Erro de rede: ${response.status} ${response.statusText}`);
     }
     return await response.json();
@@ -137,7 +172,7 @@ const defaultConcursos: Concurso[] = [
       estruturaExigida: "Texto em Prosa Dissertativo-Argumentativo técnico",
       peso: "20 Pontos",
       treinos: [
-        { id: "t1", tema: "Atuação Intersectorial do SUAS e do SUS", data: "2026-05-12", nota: 19.0, feedback: "Muito bom uso dos conceitos normativos da LOAS. Cuidado com o limite máximo de 30 linhas." }
+        { id: "t1", tema: "Atuação Intersectorial do SUAS e do SUS", data: "2026-05-12", nota: 19.0, feedback: "Muito bom uso dos conceitos normativos da LOAS. Cuidado com o limite máximo de 30 lines." }
       ]
     },
     materias: [
@@ -221,6 +256,11 @@ export default function App() {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [showCardBack, setShowCardBack] = useState(false);
   const [generatingCards, setGeneratingCards] = useState(false);
+
+  // Modal de Configurações da Chave API
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [inputApiKey, setInputApiKey] = useState<string>(() => localStorage.getItem('studyflow_user_gemini_key') || '');
+  const [showApiKey, setShowApiKey] = useState<boolean>(false);
 
   // Sincronização automática com localStorage
   useEffect(() => {
@@ -323,6 +363,13 @@ export default function App() {
 
   // --- MOTOR DE IA DO GEMINI COM FORMATO JSON ESTRUTURADO ---
   const processEditalWithGemini = async (rawText: string, customPresetContext?: string) => {
+    const activeKey = getActiveApiKey();
+    if (!activeKey) {
+      setErrorMessage("Chave API do Gemini não configurada! Por favor, clique na Engrenagem 'Configurar IA' no cabeçalho e insira a sua chave secreta.");
+      setIsProcessing(false);
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMessage(null);
     setProcessingProgress(80);
@@ -414,7 +461,7 @@ export default function App() {
 
     try {
       const data = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -508,6 +555,12 @@ export default function App() {
 
   // --- MOTOR ANKI INTELECTUAL (FLASHCARDS POR TOPICO) ---
   const generateAnkiForTopic = async (nomeTopico: string, nomeMateria: string) => {
+    const activeKey = getActiveApiKey();
+    if (!activeKey) {
+      setErrorMessage("Chave API do Gemini ausente! Insira-a nas Configurações da IA.");
+      return;
+    }
+
     setGeneratingCards(true);
     setErrorMessage(null);
 
@@ -529,7 +582,7 @@ export default function App() {
 
     try {
       const response = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -624,7 +677,7 @@ export default function App() {
             ...m,
             topicos: m.topicos.map(t => {
               if (t.id !== topicId) return t;
-              return { ...t, notas: notes };
+              return { ...t, notes: notes };
             })
           };
         })
@@ -672,6 +725,13 @@ export default function App() {
     setConcursos(actual);
     setSelectedConcursoId(actual[0].id);
     setSuccessMessage("O Edital foi removido das suas bases locais com sucesso.");
+  };
+
+  // --- SALVAR CHAVE API GEMINI NA CONFIGURAÇÃO ---
+  const handleSaveApiKey = () => {
+    localStorage.setItem('studyflow_user_gemini_key', inputApiKey.trim());
+    setIsSettingsOpen(false);
+    setSuccessMessage("Chave API do Gemini guardada com sucesso no seu navegador local!");
   };
 
   // --- MÉTRICAS DE CÁLCULO GERAIS ---
@@ -787,27 +847,44 @@ export default function App() {
           </div>
         </div>
 
-        {/* STATUS DE DESEMPENHO E GAMIFICAÇÃO */}
-        <div className="flex items-center gap-4 bg-slate-900/40 border border-slate-800 rounded-2xl px-4 py-1.5">
-          <div className="flex items-center gap-1.5 border-r border-slate-800 pr-3">
-            <Flame className="text-orange-500 fill-orange-500 animate-pulse" size={18} />
-            <div>
-              <div className="text-xs font-extrabold text-slate-100">{streak} dias</div>
-              <div className="text-[9px] text-slate-500 uppercase tracking-widest">Ritmo</div>
-            </div>
-          </div>
+        {/* STATUS DE DESEMPENHO, CONFIGURAÇÕES E GAMIFICAÇÃO */}
+        <div className="flex items-center gap-4">
+          
+          {/* Botão de Configuração de Chave API */}
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-2 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 hover:text-violet-300 transition-all font-bold"
+            title="Configurar Chave do Gemini"
+          >
+            <Settings size={14} className="animate-spin-slow" />
+            <span>Configurar IA</span>
+            {!getActiveApiKey() && (
+              <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+            )}
+          </button>
 
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center font-black text-sm text-white shadow-md shadow-violet-950/40">
-              {level}
+          {/* Painel do Ritmo de Estudos */}
+          <div className="flex items-center gap-4 bg-slate-900/40 border border-slate-800 rounded-2xl px-4 py-1.5">
+            <div className="flex items-center gap-1.5 border-r border-slate-800 pr-3">
+              <Flame className="text-orange-500 fill-orange-500 animate-pulse" size={18} />
+              <div>
+                <div className="text-xs font-extrabold text-slate-100">{streak} dias</div>
+                <div className="text-[9px] text-slate-500 uppercase tracking-widest">Ritmo</div>
+              </div>
             </div>
-            <div>
-              <div className="text-[9px] font-bold text-violet-400 uppercase tracking-wider">Mago dos Estudos</div>
-              <div className="w-24 bg-slate-950 h-1.5 rounded-full border border-slate-800 mt-1 relative overflow-hidden">
-                <div 
-                  className="bg-gradient-to-r from-violet-500 to-fuchsia-500 h-full rounded-full transition-all duration-300"
-                  style={{ width: `${exp}%` }}
-                ></div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center font-black text-sm text-white shadow-md shadow-violet-950/40">
+                {level}
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-violet-400 uppercase tracking-wider">Mago dos Estudos</div>
+                <div className="w-24 bg-slate-950 h-1.5 rounded-full border border-slate-800 mt-1 relative overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-violet-500 to-fuchsia-500 h-full rounded-full transition-all duration-300"
+                    style={{ width: `${exp}%` }}
+                  ></div>
+                </div>
               </div>
             </div>
           </div>
@@ -868,7 +945,26 @@ export default function App() {
         {/* CONTAINER DO FLUXO DE ABAS */}
         <main className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full">
           
-          {/* ABA: CENTRAL DE CONCURSOS */}
+          {/* AVISO DE CHAVE CONFIGURADA */}
+          {!getActiveApiKey() && (
+            <div className="mb-6 bg-rose-950/40 border border-rose-500/50 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                <Key className="text-rose-400 shrink-0" size={20} />
+                <div className="text-xs">
+                  <h4 className="font-bold text-rose-200">Chave API do Gemini pendente para a Vercel!</h4>
+                  <p className="text-rose-400 mt-0.5">As funções inteligentes (Leitor de PDF e Gerador do Anki) precisam da sua chave para rodar em produção.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-md shrink-0"
+              >
+                Configurar Agora
+              </button>
+            </div>
+          )}
+
+          {/* TAB: CENTRAL DE CONCURSOS */}
           {activeTab === 'concursos' && (
             <div className="space-y-6 animate-fade-in">
               
@@ -1205,7 +1301,7 @@ export default function App() {
                                         <button 
                                           onClick={() => {
                                             setSelectedTopic(topico);
-                                            setNoteText(topico.notas || '');
+                                            setNoteText(topico.notes || '');
                                           }}
                                           className="p-1.5 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800 text-slate-400 hover:text-slate-200 transition-all"
                                         >
@@ -1452,6 +1548,77 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* MODAL: CONFIGURAÇÃO DE CHAVE DE IA DO USUÁRIO */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative animate-fade-in">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-2">
+                <Key className="text-violet-400 animate-bounce" size={20} />
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-200">Configuração de Chave API</h3>
+                  <p className="text-[10px] text-slate-500">Insira a sua chave secreta da IA do Gemini</p>
+                </div>
+              </div>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-500 hover:text-slate-300">✕</button>
+            </div>
+
+            <div className="space-y-4 text-xs leading-relaxed border-t border-b border-slate-800/65 py-4">
+              <p className="text-slate-400">
+                Para que o leitor de editais e a geração automática de flashcards funcionem na sua Vercel pessoal, você precisa fornecer uma chave API do Gemini. 
+              </p>
+              
+              <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-900 space-y-1">
+                <span className="font-bold text-violet-300 text-[10px] block">Como obter uma chave gratuita?</span>
+                <p className="text-[10px] text-slate-500">
+                  1. Acesse o site <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Google AI Studio</a>.<br />
+                  2. Clique em <strong>"Get API Key"</strong>.<br />
+                  3. Copie o código gerado e cole no campo abaixo.
+                </p>
+              </div>
+
+              {/* Campo Input API KEY */}
+              <div className="space-y-1.5 relative">
+                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Chave do Gemini (v1beta):</label>
+                <div className="relative flex items-center">
+                  <input 
+                    type={showApiKey ? "text" : "password"} 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-3 pr-10 text-xs focus:outline-none focus:border-violet-500"
+                    placeholder="Cole sua chave AIzaSy..."
+                    value={inputApiKey}
+                    onChange={(e) => setInputApiKey(e.target.value)}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 text-slate-500 hover:text-slate-300"
+                  >
+                    {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 text-xs">
+              <button 
+                type="button" 
+                onClick={() => setIsSettingsOpen(false)} 
+                className="bg-slate-950 text-slate-400 border border-slate-800 hover:text-white px-3 py-1.5 rounded-lg font-bold"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button"
+                onClick={handleSaveApiKey}
+                className="bg-violet-600 hover:bg-violet-500 text-white px-4 py-1.5 rounded-lg font-bold transition-all shadow-md"
+              >
+                Salvar Chave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: EDIÇÃO DE MÉTRICAS E ANOTAÇÕES DE TÓPICO */}
       {selectedTopic && (
