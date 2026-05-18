@@ -267,16 +267,19 @@ export default function App() {
     localStorage.setItem('studyflow_concursos_v4_pt', JSON.stringify(concursos));
   }, [concursos]);
 
+  // Sincronização de seleção de concurso
   useEffect(() => {
     localStorage.setItem('studyflow_selected_id_v4_pt', selectedConcursoId);
   }, [selectedConcursoId]);
 
+  // Sincronização de gamificação
   useEffect(() => {
     localStorage.setItem('studyflow_level_pt', level.toString());
     localStorage.setItem('studyflow_exp_pt', exp.toString());
     localStorage.setItem('studyflow_streak_pt', streak.toString());
   }, [level, exp, streak]);
 
+  // Sincronização de flashcards
   useEffect(() => {
     localStorage.setItem('studyflow_flashcards_pt', JSON.stringify(flashcards));
   }, [flashcards]);
@@ -666,6 +669,7 @@ export default function App() {
     setSuccessMessage("Métricas de estudo e desempenho contabilizadas no seu perfil!");
   };
 
+  // Método de salvamento corrigido para utilizar a propriedade correta 'notas' do objeto Topic
   const saveTopicNotes = (subjectId: string, topicId: string, notes: string) => {
     setConcursos(prev => prev.map(c => {
       if (c.id !== selectedConcursoId) return c;
@@ -677,7 +681,7 @@ export default function App() {
             ...m,
             topicos: m.topicos.map(t => {
               if (t.id !== topicId) return t;
-              return { ...t, notes: notes };
+              return { ...t, notas: notes };
             })
           };
         })
@@ -1301,7 +1305,7 @@ export default function App() {
                                         <button 
                                           onClick={() => {
                                             setSelectedTopic(topico);
-                                            setNoteText(topico.notes || '');
+                                            setNoteText(topico.notas || '');
                                           }}
                                           className="p-1.5 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800 text-slate-400 hover:text-slate-200 transition-all"
                                         >
@@ -1686,6 +1690,7 @@ export default function App() {
               />
               <button 
                 onClick={() => {
+                  if (!selectedTopic) return;
                   let sId = "";
                   activeConcurso.materias.forEach(m => {
                     if (m.topicos.some(t => t.id === selectedTopic.id)) sId = m.id;
