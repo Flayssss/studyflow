@@ -1,2259 +1,1539 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, 
   BookOpen, 
-  Target, 
-  Zap, 
-  Trophy, 
-  Play, 
-  Pause, 
-  RotateCcw,
-  Search, 
-  Bell, 
-  CheckCircle2, 
-  BrainCircuit, 
-  Sword, 
-  Shield, 
-  ChevronRight, 
+  Calendar, 
+  CheckCircle, 
+  Award, 
+  Clock, 
+  FileText, 
+  Database, 
+  Plus, 
+  Upload, 
+  Brain, 
   Sparkles, 
-  Wand2, 
-  BarChart3, 
-  Flame,
-  Clock,
-  Plus,
-  History,
+  Trash2, 
+  TrendingUp, 
+  ChevronRight, 
+  ChevronDown, 
+  Bookmark, 
+  Info, 
+  Flame, 
+  Target, 
+  HelpCircle,
   RefreshCw,
-  Upload,
-  Sparkle,
-  FileText,
-  Calendar,
-  Layers,
-  CheckSquare,
   AlertCircle,
-  Cpu,
-  Bookmark,
-  GraduationCap,
-  Lightbulb,
-  X
+  Sliders,
+  Check,
+  FileCheck
 } from 'lucide-react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, Radar
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  RadarChart, 
+  PolarGrid, 
+  PolarAngleAxis, 
+  PolarRadiusAxis, 
+  Radar 
 } from 'recharts';
-import { motion, AnimatePresence } from 'framer-motion';
+
+// --- CONFIGURAÇÃO DA API DO GEMINI ---
+// A chave é fornecida pelo ambiente em tempo de execução
+const apiKey = "";
+
+// Função de retry com exponencial backoff para tolerância a falhas na API do Gemini
+const fetchWithRetry = async (url: string, options: any, retries = 5, delay = 1000): Promise<any> => {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`Erro de rede: ${response.status} ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(url, options, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+};
+
+// --- ESTRUTURAS DE DADOS (INTERFACES) ---
+interface Topic {
+  id: string;
+  nome: string;
+  prioridade: 'Alta' | 'Média' | 'Baixa';
+  frequencia: string;
+  peso: number;
+  estudado: boolean;
+  revisado: boolean;
+  exercicios: boolean;
+  questoesFeitas: number;
+  acertos: number;
+  tempoEstudado: number; // em minutos
+  notas: string;
+}
 
 interface Subject {
   id: string;
-  name: string;
-  progress: number;
-  accuracy: number;
-  color: string;
-  mastery: string;
+  nomeMateria: string;
+  topicos: Topic[];
 }
 
-interface QuestionLog {
+interface Concurso {
   id: string;
-  subject: string;
-  total: number;
-  correct: number;
-  xpGained: number;
-  timestamp: string;
-}
-
-interface SpectralPalette {
-  name: string;
-  gradient: string;
-}
-
-interface SyllabusTopic {
-  topicName: string;
-  completed: boolean;
-  reviewed: boolean;
-  exercisesDone: boolean;
-  questionsCount: number;
-  correctAnswers: number;
-  difficulty: number; // 1 a 5
-  lastStudied: string;
-  revisionsCount: number;
-}
-
-interface VerticalizedSubject {
-  subjectName: string;
-  topics: SyllabusTopic[];
-}
-
-interface ExamFolder {
-  id: string; 
-  title: string;
-  institution: string;
+  nomeConcurso: string;
+  orgao: string;
+  cargo: string;
   banca: string;
-  salary: string;
+  dataProva: string;
+  periodoInscricao: string;
+  valorInscricao: string;
+  requisitos: string;
   vagas: string;
-  examSystemDescription: string;
-  registrationStart: string;
-  registrationEnd: string;
-  examDate: string;
-  overlapAnalysis: string;
-  bancaStyleExplanation: string;
-  approvalProbability: number;
-  syllabus: VerticalizedSubject[];
+  salario: string;
+  materias: Subject[];
+  redacaoInfo: {
+    possuiRedacao: boolean;
+    criterios: string;
+    temasProvaveis: string[];
+    estruturaExigida: string;
+    peso: string;
+    treinos: { id: string; tema: string; data: string; nota: number; feedback: string }[];
+  };
+  datasImportantes: { id: string; evento: string; data: string }[];
 }
 
-interface Flashcard {
-  id: string;
-  type: 'standard' | 'cloze' | 'law' | 'trap' | 'contextualized';
-  subject: string;
-  banca?: string;
-  front: string;
-  back: string;
-  explanation?: string;
-  clozeAnswer?: string;
-  difficultyRating: number;
-  easeFactor: number;
-  repetitions: number;
-  intervalDays: number;
-  nextReviewDate: Date;
-}
-
-const DEFAULT_EXAMS: ExamFolder[] = [
+// Dados padrão estruturados para o edital SEDES-DF (Quadrix) como plano de contingência
+const defaultConcursos: Concurso[] = [
   {
-    id: 'sedes',
-    title: 'SEDES-DF',
-    institution: 'Secretaria de Desenvolvimento Social',
-    banca: 'IADES',
-    salary: 'R$ 5.480,00',
-    vagas: '120 + CR',
-    examSystemDescription: 'Múltipla escolha (5 alternativas) com pontuação tradicional de acertos e alto peso nas específicas.',
-    registrationStart: '2026-05-10',
-    registrationEnd: '2026-06-15',
-    examDate: '2026-08-26',
-    overlapAnalysis: 'Alta compatibilidade (78%) com seu progresso atual de estudo. Ótimo aproveitamento de Língua Portuguesa e D. Administrativo.',
-    bancaStyleExplanation: 'A banca IADES prioriza a literalidade das leis e do regimento interno de assistência social.',
-    approvalProbability: 72,
-    syllabus: [
+    id: "sedes-df-v3",
+    nomeConcurso: "SEDES-DF (Edital Oficial)",
+    orgao: "Secretaria de Estado de Desenvolvimento Social do Distrito Federal",
+    cargo: "Especialista em Assistência Social",
+    banca: "Instituto Quadrix",
+    dataProva: "2026-11-20",
+    periodoInscricao: "Inscrições Abertas",
+    valorInscricao: "R$ 90,00",
+    requisitos: "Diploma de Ensino Superior na área de actuação específica",
+    vagas: "120 Vagas Directas + Cadastro Reserva",
+    salario: "R$ 5.480,00",
+    datasImportantes: [
+      { id: "d1", evento: "Prova Escrita (Objectiva + Redacção)", data: "2026-11-20" },
+      { id: "d2", evento: "Fim do Prazo de Inscrição", data: "2026-10-15" }
+    ],
+    redacaoInfo: {
+      possuiRedacao: true,
+      criterios: "Texto dissertativo-argumentativo de até 30 linhas focado em temas de Assistência Social e Directrizes do SUAS.",
+      temasProvaveis: [
+        "A relevância do Plano de Acção da Assistência Social no combate à pobreza",
+        "Atendimento às famílias vulneráveis através dos CRAS e CREAS no DF",
+        "O papel do Cadastro Único na consolidação da justiça social comunitária"
+      ],
+      estruturaExigida: "Texto em Prosa Dissertativo-Argumentativo técnico",
+      peso: "20 Pontos",
+      treinos: [
+        { id: "t1", tema: "Atuação Intersectorial do SUAS e do SUS", data: "2026-05-12", nota: 19.0, feedback: "Muito bom uso dos conceitos normativos da LOAS. Cuidado com o limite máximo de 30 linhas." }
+      ]
+    },
+    materias: [
       {
-        subjectName: 'Língua Portuguesa',
-        topics: [
-          { topicName: 'Compreensão e interpretação de textos', completed: true, reviewed: true, exercisesDone: true, questionsCount: 45, correctAnswers: 39, difficulty: 2, lastStudied: 'Ontem', revisionsCount: 3 },
-          { topicName: 'Ortografia oficial, acentuação e crase', completed: true, reviewed: false, exercisesDone: true, questionsCount: 20, correctAnswers: 14, difficulty: 3, lastStudied: 'Há 2 dias', revisionsCount: 1 },
-          { topicName: 'Sintaxe da oração e do período', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
+        id: "m_basics_pt",
+        nomeMateria: "Conhecimentos Básicos - Língua Portuguesa",
+        topicos: [
+          { id: "t_pt1", nome: "Compreensão e interpretação de textos de géneros variados", prioridade: "Alta", frequencia: "94%", peso: 2, estudado: true, revisado: true, exercicios: true, questoesFeitas: 40, acertos: 38, tempoEstudado: 90, notas: "Focar na tipologia textual exigida pela Quadrix." },
+          { id: "t_pt2", nome: "Domínio da estrutura morfossintática do período", prioridade: "Alta", frequencia: "87%", peso: 2, estudado: false, revisado: false, exercicios: false, questoesFeitas: 0, acertos: 0, tempoEstudado: 0, notas: "" },
+          { id: "t_pt3", nome: "Coesão textual e relações de coordenação/subordinação", prioridade: "Média", frequencia: "75%", peso: 1.5, estudado: false, revisado: false, exercicios: false, questoesFeitas: 0, acertos: 0, tempoEstudado: 0, notas: "" }
         ]
       },
       {
-        subjectName: 'Direito Administrativo',
-        topics: [
-          { topicName: 'Organização administrativa do Estado', completed: true, reviewed: true, exercisesDone: true, questionsCount: 30, correctAnswers: 26, difficulty: 2, lastStudied: 'Há 3 dias', revisionsCount: 2 },
-          { topicName: 'Atos administrativos: conceito e requisitos', completed: false, reviewed: false, exercisesDone: false, questionsCount: 5, correctAnswers: 2, difficulty: 5, lastStudied: 'Há 5 dias', revisionsCount: 0 }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'der',
-    title: 'DER-DF',
-    institution: 'Departamento de Estradas de Rodagem do DF',
-    banca: 'IADES',
-    salary: 'R$ 7.200,00',
-    vagas: '85',
-    examSystemDescription: 'Múltipla escolha tradicional com peso maior nas disciplinas de legislação rodoviária e trânsito.',
-    registrationStart: '2026-08-01',
-    registrationEnd: '2026-09-05',
-    examDate: '2026-10-25',
-    overlapAnalysis: 'Compatibilidade de 61% com seu progresso. Alta sinergia em Português e Administrativo, exige estudo de Código de Trânsito Brasileiro.',
-    bancaStyleExplanation: 'IADES tende a cobrar literalidade extrema do Código de Trânsito Brasileiro.',
-    approvalProbability: 58,
-    syllabus: [
-      {
-        subjectName: 'Língua Portuguesa',
-        topics: [
-          { topicName: 'Significação das palavras e sinonímia', completed: true, reviewed: true, exercisesDone: true, questionsCount: 15, correctAnswers: 12, difficulty: 1, lastStudied: 'Há 4 dias', revisionsCount: 1 },
-          { topicName: 'Emprego das classes de palavras', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 }
+        id: "m_basics_leg",
+        nomeMateria: "Conhecimentos Básicos - Legislação Aplicável",
+        topicos: [
+          { id: "t_leg1", nome: "Lei Orgânica do Distrito Federal (LODF) - Títulos I, II e VII", prioridade: "Alta", frequencia: "92%", peso: 2.5, estudado: true, revisado: false, exercicios: true, questoesFeitas: 25, acertos: 21, tempoEstudado: 120, notas: "Dar atenção especial aos fundamentos e competências do DF." },
+          { id: "t_leg2", nome: "Regime Jurídico dos Servidores Públicos do DF - Lei Complementar 840/2011", prioridade: "Alta", frequencia: "89%", peso: 2.5, estudado: false, revisado: false, exercicios: false, questoesFeitas: 0, acertos: 0, tempoEstudado: 0, notas: "" }
         ]
       },
       {
-        subjectName: 'Legislação de Trânsito',
-        topics: [
-          { topicName: 'Código de Trânsito Brasileiro (CTB) - Introdução', completed: false, reviewed: false, exercisesDone: false, questionsCount: 10, correctAnswers: 4, difficulty: 4, lastStudied: 'Há 6 dias', revisionsCount: 0 },
-          { topicName: 'Normas Gerais de Circulação e Conduta', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 }
+        id: "m_especificas_assist",
+        nomeMateria: "Conhecimentos Específicos - Assistência Social",
+        topicos: [
+          { id: "t_esp1", nome: "Lei Orgânica de Assistência Social (LOAS) - Lei Federal 8.742/1993", prioridade: "Alta", frequencia: "100%", peso: 3, estudado: true, revisado: true, exercicios: true, questoesFeitas: 110, acertos: 102, tempoEstudado: 240, notas: "Revisar com urgência as actualizações sobre os benefícios eventuais." },
+          { id: "t_esp2", nome: "Sistema Único de Assistência Social (SUAS) e Norma Operacional Básica (NOB)", prioridade: "Alta", frequencia: "98%", peso: 3, estudado: true, revisado: false, exercicios: true, questoesFeitas: 60, acertos: 54, tempoEstudado: 180, notas: "Estudar detalhadamente a tipificação dos serviços de Protecção Social Básica." },
+          { id: "t_esp3", nome: "Política Nacional de Assistência Social (PNAS)", prioridade: "Média", frequencia: "80%", peso: 2, estudado: false, revisado: false, exercicios: false, questoesFeitas: 0, acertos: 0, tempoEstudado: 0, notas: "" }
         ]
       }
     ]
   }
 ];
-
-const INITIAL_SUBJECTS: Subject[] = [
-  { id: '1', name: 'Direito Administrativo', progress: 65, accuracy: 72, color: '#6366f1', mastery: 'Adepto' },
-  { id: '2', name: 'Língua Portuguesa', progress: 88, accuracy: 91, color: '#10b981', mastery: 'Mestre' },
-  { id: '3', name: 'Direito Constitucional', progress: 42, accuracy: 68, color: '#8b5cf6', mastery: 'Iniciado' },
-];
-
-const INITIAL_LOGS: QuestionLog[] = [
-  { id: 'l1', subject: 'Direito Administrativo', total: 20, correct: 16, xpGained: 240, timestamp: 'Há 2 horas' },
-  { id: 'l2', subject: 'Língua Portuguesa', total: 15, correct: 14, xpGained: 210, timestamp: 'Ontem' },
-];
-
-const INITIAL_FLASHCARDS: Flashcard[] = [
-  {
-    id: 'f1',
-    type: 'standard',
-    subject: 'Direito Administrativo',
-    front: 'O que é poder constituinte derivado reformador?',
-    back: 'É o poder de modificar a Constituição Federal por meio de um procedimento formal e solene, previamente estabelecido pelo poder constituinte originário, respeitando limites materiais (cláusulas pétreas), formais e circunstanciais.',
-    explanation: 'Dica do Professor: Memorize que o constituinte derivado é secundário, condicionado e limitado.',
-    difficultyRating: 2,
-    easeFactor: 2.5,
-    repetitions: 1,
-    intervalDays: 1,
-    nextReviewDate: new Date()
-  },
-  {
-    id: 'f2',
-    type: 'cloze',
-    subject: 'Direito Constitucional',
-    front: 'A Constituição pode ser emendada mediante proposta de {{c1::um terço, no mínimo, dos membros da Câmara dos Deputados ou do Senado Federal}}.',
-    back: 'A Constituição Federal exige um quórum qualificado mínimo de 1/3 das casas legislativas para propor emendas constitucionais.',
-    clozeAnswer: 'um terço, no mínimo, dos membros da Câmara dos Deputados ou do Senado Federal',
-    explanation: 'Pegadinha Clássica: As bancas costumam trocar "1/3" por "maioria absoluta" na iniciativa. Atenção!',
-    difficultyRating: 3,
-    easeFactor: 2.2,
-    repetitions: 0,
-    intervalDays: 0,
-    nextReviewDate: new Date()
-  }
-];
-
-const CHART_DATA = [
-  { name: 'Sem 1', xp: 1200 },
-  { name: 'Sem 2', xp: 1900 },
-  { name: 'Sem 3', xp: 1600 },
-  { name: 'Sem 4', xp: 2400 },
-  { name: 'Sem 5', xp: 2200 },
-  { name: 'Sem 6', xp: 2900 },
-];
-
-const radarData = [
-  { subject: 'D. Adm', A: 70, full: 100 },
-  { subject: 'Português', A: 90, full: 100 },
-  { subject: 'Const', A: 60, full: 100 },
-  { subject: 'RLM', A: 40, full: 100 },
-  { subject: 'Informática', A: 50, full: 100 },
-];
-
-const GlassCard = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-slate-950/60 backdrop-blur-xl border border-white/10 rounded-[24px] overflow-hidden ${className}`}>
-    {children}
-  </div>
-);
-
-const ProgressBar = ({ progress, color }: { progress: number; color: string }) => (
-  <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-    <motion.div 
-      initial={{ width: 0 }}
-      animate={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-      className="h-full rounded-full"
-      style={{ backgroundColor: color }}
-    />
-  </div>
-);
-
-const WizardAvatar = ({ 
-  level, 
-  vitality, 
-  streak, 
-  imageUrl, 
-  palette 
-}: { 
-  level: number; 
-  vitality: number; 
-  streak: number; 
-  imageUrl: string | null; 
-  palette: SpectralPalette;
-}) => {
-  const isWeak = vitality < 50;
-  const colorPercentage = Math.min(100, level * 10);
-
-  return (
-    <div className="relative flex flex-col items-center group">
-      <motion.div 
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        className="relative w-44 h-44 flex items-center justify-center"
-      >
-        <AnimatePresence>
-          {streak > 5 && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 0.8, scale: 1.15, rotate: 360 }}
-              transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-              className="absolute inset-0 rounded-full border-2 border-dashed border-indigo-500/20 blur-sm bg-gradient-to-tr from-indigo-500/5 to-transparent"
-            />
-          )}
-        </AnimatePresence>
-
-        <div className="relative w-36 h-36 rounded-full overflow-hidden border-2 border-indigo-500/30 shadow-[0_0_25px_rgba(99,102,241,0.2)] bg-slate-950 flex items-center justify-center">
-          {imageUrl ? (
-            <div className="relative w-full h-full">
-              <img 
-                src={imageUrl} 
-                alt="Wizard Avatar" 
-                className="w-full h-full object-cover transition-all duration-500"
-                style={{
-                  filter: `grayscale(${Math.max(0, 100 - colorPercentage)}%)`
-                }}
-              />
-              <div 
-                className="absolute inset-0 mix-blend-color pointer-events-none opacity-65"
-                style={{
-                  background: palette.gradient
-                }}
-              />
-            </div>
-          ) : (
-            <svg viewBox="0 0 200 200" className={`w-32 h-32 drop-shadow-2xl ${isWeak ? 'grayscale opacity-70' : ''}`}>
-              <path d="M60 180 L100 80 L140 180 Z" fill={level > 10 ? "#312e81" : "#1e1b4b"} stroke="#6366f1" strokeWidth="2" />
-              <circle cx="100" cy="90" r="25" fill="#fecaca" />
-              <circle cx="92" cy="85" r="2.5" fill="#1e1b4b" />
-              <circle cx="108" cy="85" r="2.5" fill="#1e1b4b" />
-              <path d="M92 98 Q100 105 108 98" stroke="#1e1b4b" fill="none" strokeWidth="1.5" />
-              <path d="M50 75 L100 10 L150 75 Z" fill="#3730a3" />
-              <path d="M45 70 Q100 85 155 70" stroke="#6366f1" strokeWidth="6" fill="none" strokeLinecap="round" />
-            </svg>
-          )}
-
-          <div className="absolute inset-0 border-2 border-indigo-500/20 rounded-full pointer-events-none animate-pulse" />
-        </div>
-
-        <div className="absolute -bottom-2 bg-indigo-600 border border-indigo-400 text-white font-black px-3 py-1 rounded-full text-[10px] shadow-lg">
-          Lvl {level}
-        </div>
-      </motion.div>
-
-      <div className="mt-4 text-center">
-        <span className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[9px] font-black text-indigo-400 uppercase tracking-tighter">
-          {level < 5 ? 'Aprendiz' : level < 15 ? 'Mago de Elite' : 'Arquimago Supremo'}
-        </span>
-        <p className="text-xs text-slate-400 mt-2 font-bold uppercase tracking-widest">
-          Alquimia: <span className="text-indigo-400 font-extrabold">{colorPercentage}% Colorido</span>
-        </p>
-        <p className="text-[9px] text-slate-500 italic mt-0.5">Sintonia: {palette.name}</p>
-      </div>
-    </div>
-  );
-};
-
-const FocusTimer = ({ onComplete }: { onComplete: (xp: number, stat: 'int' | 'str') => void }) => {
-  const [seconds, setSeconds] = useState(25 * 60);
-  const [isActive, setIsActive] = useState(false);
-  const [sessionType, setSessionType] = useState<'study' | 'break'>('study');
-
-  useEffect(() => {
-    let interval: any = null;
-    if (isActive && seconds > 0) {
-      interval = setInterval(() => {
-        setSeconds((s) => s - 1);
-      }, 1000);
-    } else if (seconds === 0) {
-      setIsActive(false);
-      if (sessionType === 'study') {
-        onComplete(400, 'int');
-        setSessionType('break');
-        setSeconds(5 * 60);
-      } else {
-        setSessionType('study');
-        setSeconds(25 * 60);
-      }
-    }
-    return () => clearInterval(interval);
-  }, [isActive, seconds, sessionType, onComplete]);
-
-  const formatTime = (s: number) => {
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const toggleTimer = () => setIsActive(!isActive);
-  const resetTimer = () => {
-    setIsActive(false);
-    setSeconds(sessionType === 'study' ? 25 * 60 : 5 * 60);
-  };
-
-  return (
-    <div className="flex flex-col items-center justify-center p-8 bg-slate-900/60 rounded-[32px] border border-white/5 relative overflow-hidden">
-      <div className="absolute top-4 left-4 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-        <Clock size={12} className="text-indigo-400" />
-        {sessionType === 'study' ? 'Sessão de Foco Ativo' : 'Intervalo de Meditação'}
-      </div>
-
-      <h2 className="text-7xl font-mono font-black text-white tracking-tighter my-6 tabular-nums">
-        {formatTime(seconds)}
-      </h2>
-
-      <div className="flex gap-4">
-        <button 
-          onClick={toggleTimer}
-          className={`px-6 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 shadow-lg transition-all ${
-            isActive 
-              ? 'bg-slate-800 text-white hover:bg-slate-700' 
-              : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'
-          }`}
-        >
-          {isActive ? <Pause size={14} /> : <Play size={14} />}
-          {isActive ? 'Pausar' : 'Iniciar'}
-        </button>
-        <button 
-          onClick={resetTimer}
-          className="p-3 rounded-full bg-white/5 text-slate-400 hover:text-white transition-all"
-        >
-          <RotateCcw size={14} />
-        </button>
-      </div>
-    </div>
-  );
-};
 
 export default function App() {
-  const [profile, setProfile] = useState(() => {
-    const local = localStorage.getItem('studyflow_profile');
-    return local ? JSON.parse(local) : {
-      name: "Mago Willian Nunes",
-      level: 12,
-      xp: 1850,
-      maxXp: 3000,
-      streak: 15,
-      vitality: 90,
-      stats: { int: 168, str: 112, end: 94 }
-    };
+  // --- PERSISTÊNCIA E ESTADOS GERAIS DO UTILIZADOR ---
+  const [concursos, setConcursos] = useState<Concurso[]>(() => {
+    const guardados = localStorage.getItem('studyflow_concursos_v4_pt');
+    return guardados ? JSON.parse(guardados) : defaultConcursos;
   });
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'concursos' | 'flashcards' | 'subjects' | 'lab' | 'timer' | 'chronicles'>('dashboard');
-  const [studyMode, setStudyMode] = useState<'iniciante' | 'guerra'>('iniciante');
+  const [selectedConcursoId, setSelectedConcursoId] = useState<string>(() => {
+    const idGuardado = localStorage.getItem('studyflow_selected_id_v4_pt');
+    return idGuardado && idGuardado !== 'undefined' ? idGuardado : (concursos[0]?.id || "sedes-df-v3");
+  });
+
+  const [activeTab, setActiveTab] = useState<'concursos' | 'dashboard' | 'anki'>('concursos');
   
-  const [avatarImage, setAvatarImage] = useState<string | null>(() => {
-    return localStorage.getItem('studyflow_avatar') || null;
+  // Gamificação (Nível do Concurseiro)
+  const [level, setLevel] = useState<number>(() => Number(localStorage.getItem('studyflow_level_pt') || '10'));
+  const [exp, setExp] = useState<number>(() => Number(localStorage.getItem('studyflow_exp_pt') || '45'));
+  const [streak, setStreak] = useState<number>(() => Number(localStorage.getItem('studyflow_streak_pt') || '3'));
+
+  // Estados de Carregamento e Processamento de Ficheiros
+  const [pdfText, setPdfText] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [processingStatus, setProcessingStatus] = useState<string>('');
+  const [processingProgress, setProcessingProgress] = useState<number>(0);
+  
+  // Notificações e Modais de Feedback
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Accordions e Editores
+  const [expandedSubject, setExpandedSubject] = useState<string | null>("m_especificas_assist");
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [noteText, setNoteText] = useState<string>('');
+  
+  // Novo Treino de Redacção
+  const [newTema, setNewTema] = useState<string>('');
+  const [newNota, setNewNota] = useState<number>(0);
+  const [newFeedback, setNewFeedback] = useState<string>('');
+
+  // Pilha de Flashcards Inteligentes (Anki)
+  const [flashcards, setFlashcards] = useState<{id: string, front: string, back: string, subject: string, ease: number}[]>(() => {
+    const guardados = localStorage.getItem('studyflow_flashcards_pt');
+    return guardados ? JSON.parse(guardados) : [
+      { id: "fc1", front: "Como se define a assistência social segundo o artigo 1º da LOAS?", back: "É política de segurança social não contributiva, que provê os mínimos sociais, realizada através de um conjunto integrado de ações de iniciativa pública e da sociedade.", subject: "LOAS", ease: 2.5 },
+      { id: "fc2", front: "Qual a diferença de actuação entre o CRAS e o CREAS no âmbito do SUAS?", back: "O CRAS atua na Protecção Social Básica (prevenção de riscos), enquanto o CREAS atua na Protecção Social Especial (famílias com direitos já violados).", subject: "SUAS", ease: 2.4 }
+    ];
   });
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [showCardBack, setShowCardBack] = useState(false);
+  const [generatingCards, setGeneratingCards] = useState(false);
 
-  const [subjects, setSubjects] = useState<Subject[]>(() => {
-    const local = localStorage.getItem('studyflow_subjects');
-    return local ? JSON.parse(local) : INITIAL_SUBJECTS;
-  });
-
-  const [logs, setLogs] = useState<QuestionLog[]>(() => {
-    const local = localStorage.getItem('studyflow_logs');
-    return local ? JSON.parse(local) : INITIAL_LOGS;
-  });
-
-  const [examFolders, setExamFolders] = useState<ExamFolder[]>(() => {
-    const local = localStorage.getItem('studyflow_exams');
-    return local ? JSON.parse(local) : DEFAULT_EXAMS;
-  });
-
-  const [activeExamId, setActiveExamId] = useState(() => {
-    const local = localStorage.getItem('studyflow_active_exam');
-    return local || 'sedes';
-  });
-
-  // Input processing states
-  const [aiInputText, setAiInputText] = useState<string>('');
-  const [isAiProcessing, setIsAiProcessing] = useState<boolean>(false);
-  const [aiNotification, setAiNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-
-  const [spectralPalette, setSpectralPalette] = useState<SpectralPalette>(() => {
-    const local = localStorage.getItem('studyflow_palette');
-    return local ? JSON.parse(local) : {
-      name: "Nebulosa Cósmica do Conhecimento",
-      gradient: "linear-gradient(135deg, hsl(230, 80%, 50%), hsl(300, 80%, 50%))"
-    };
-  });
-
-  // Anki interactive state
-  const [flashcards, setFlashcards] = useState<Flashcard[]>(() => {
-    const local = localStorage.getItem('studyflow_flashcards');
-    return local ? JSON.parse(local) : INITIAL_FLASHCARDS;
-  });
-
-  const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
-  const [isFlipped, setIsFlipped] = useState<boolean>(false);
-  const [bancaFilter, setBancaFilter] = useState<string>('TODOS');
-  const [ankiInputText, setAnkiInputText] = useState<string>('');
-  const [selectedBanca, setSelectedBanca] = useState<string>('IADES');
-  const [isAnkiGenerating, setIsAnkiGenerating] = useState<boolean>(false);
-  const [clozeRevealed, setClozeRevealed] = useState<boolean>(false);
+  // Sincronização automática com localStorage
+  useEffect(() => {
+    localStorage.setItem('studyflow_concursos_v4_pt', JSON.stringify(concursos));
+  }, [concursos]);
 
   useEffect(() => {
-    localStorage.setItem('studyflow_profile', JSON.stringify(profile));
-  }, [profile]);
+    localStorage.setItem('studyflow_selected_id_v4_pt', selectedConcursoId);
+  }, [selectedConcursoId]);
 
   useEffect(() => {
-    localStorage.setItem('studyflow_subjects', JSON.stringify(subjects));
-  }, [subjects]);
+    localStorage.setItem('studyflow_level_pt', level.toString());
+    localStorage.setItem('studyflow_exp_pt', exp.toString());
+    localStorage.setItem('studyflow_streak_pt', streak.toString());
+  }, [level, exp, streak]);
 
   useEffect(() => {
-    localStorage.setItem('studyflow_logs', JSON.stringify(logs));
-  }, [logs]);
-
-  useEffect(() => {
-    localStorage.setItem('studyflow_exams', JSON.stringify(examFolders));
-  }, [examFolders]);
-
-  useEffect(() => {
-    localStorage.setItem('studyflow_active_exam', activeExamId);
-  }, [activeExamId]);
-
-  useEffect(() => {
-    localStorage.setItem('studyflow_avatar', avatarImage || '');
-  }, [avatarImage]);
-
-  useEffect(() => {
-    localStorage.setItem('studyflow_palette', JSON.stringify(spectralPalette));
-  }, [spectralPalette]);
-
-  useEffect(() => {
-    localStorage.setItem('studyflow_flashcards', JSON.stringify(flashcards));
+    localStorage.setItem('studyflow_flashcards_pt', JSON.stringify(flashcards));
   }, [flashcards]);
 
+  // Carrega a biblioteca de renderização e análise de PDFs na inicialização
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
-    script.async = true;
-    script.onload = () => {
-      // @ts-ignore
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-    };
-    document.body.appendChild(script);
+    if (!(window as any).pdfjsLib) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      };
+      document.head.appendChild(script);
+    }
   }, []);
 
-  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const activeConcurso = concursos.find(c => c.id === selectedConcursoId) || concursos[0] || defaultConcursos[0];
+
+  // --- MECANISMO DE GAMIFICAÇÃO (SOMA DE EXPERIÊNCIA) ---
+  const addExp = (pontos: number) => {
+    let novosPontos = exp + pontos;
+    let novoNivel = level;
+    while (novosPontos >= 100) {
+      novosPontos -= 100;
+      novoNivel += 1;
+      setSuccessMessage(`⭐ NÍVEL CONCLUÍDO! Alcançou o Nível ${novoNivel} no Mapeador de Estudos! ⭐`);
+    }
+    setExp(novosPontos);
+    setLevel(novoNivel);
+  };
+
+  // --- LEITOR DE PDF E EXTRAÇÃO REAL DO FLUXO DE TEXTO ---
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
-    
-    setIsAiProcessing(true);
-    setAiNotification({ message: 'Lendo e decodificando edital em PDF...', type: 'info' });
-    
+
+    if (!(window as any).pdfjsLib) {
+      setErrorMessage("O decodificador de PDF em segundo plano ainda está a carregar. Tente novamente em alguns segundos.");
+      return;
+    }
+
+    setIsProcessing(true);
+    setProcessingProgress(15);
+    setProcessingStatus("Iniciando leitura e abertura do ficheiro PDF...");
+    setErrorMessage(null);
+
     try {
       const fileReader = new FileReader();
-      fileReader.onload = async function() {
-        const typedarray = new Uint8Array(this.result as ArrayBuffer);
-        // @ts-ignore
-        const pdf = await window.pdfjsLib.getDocument(typedarray).promise;
-        let fullText = '';
-        const pagesToRead = Math.min(pdf.numPages, 10);
-        for (let i = 1; i <= pagesToRead; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map((item: any) => item.str).join(' ');
-          fullText += pageText + '\n';
+      fileReader.onload = async function () {
+        try {
+          const typedarray = new Uint8Array(this.result as ArrayBuffer);
+          const pdf = await (window as any).pdfjsLib.getDocument(typedarray).promise;
+          
+          setProcessingStatus(`Mapeando páginas do edital (Detectadas: ${pdf.numPages})...`);
+          setProcessingProgress(40);
+          
+          let extractedText = "";
+          // Lemos as primeiras 30 páginas para manter o fluxo rápido e não estourar os limites da API
+          const pagesToRead = Math.min(pdf.numPages, 30);
+          
+          for (let i = 1; i <= pagesToRead; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            extractedText += textContent.items.map((item: any) => item.str).join(" ") + "\n";
+            setProcessingProgress(Math.floor(40 + (i / pagesToRead) * 30));
+          }
+
+          setPdfText(extractedText);
+          setProcessingStatus("Processamento local concluído! Enviando dados ao motor de IA...");
+          setProcessingProgress(75);
+          
+          await processEditalWithGemini(extractedText);
+        } catch (err: any) {
+          setErrorMessage(`Falha na extração interna das páginas: ${err.message}`);
+          setIsProcessing(false);
         }
-        setAiInputText(fullText);
-        setAiNotification({ message: `PDF lido com sucesso (${pagesToRead} páginas extraídas). Agora clique no botão abaixo para processar!`, type: 'success' });
-        setIsAiProcessing(false);
       };
       fileReader.readAsArrayBuffer(file);
-    } catch (error) {
-      console.error(error);
-      setAiNotification({ message: 'Erro ao analisar PDF. Usando fallback de texto.', type: 'error' });
-      setIsAiProcessing(false);
+    } catch (err: any) {
+      setErrorMessage(`Não foi possível abrir o arquivo: ${err.message}`);
+      setIsProcessing(false);
     }
   };
 
-  const activeExam = useMemo(() => {
-    return examFolders.find(e => e.id === activeExamId) || examFolders[0];
-  }, [examFolders, activeExamId]);
+  // --- MOTOR DE IA DO GEMINI COM FORMATO JSON ESTRUTURADO ---
+  const processEditalWithGemini = async (rawText: string, customPresetContext?: string) => {
+    setIsProcessing(true);
+    setErrorMessage(null);
+    setProcessingProgress(80);
+    setProcessingStatus("O Oráculo Gemini está a catalogar e a verticalizar o conteúdo...");
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setAvatarImage(reader.result);
-          const hue1 = Math.floor(Math.random() * 360);
-          const hue2 = (hue1 + 120) % 360;
-          const names = [
-            "Cristal de Éter", "Nebulosa de Orion", "Fogo de Fênix", 
-            "Sabedoria Dracônica", "Tempestade Estelar", "Mana da Floresta"
-          ];
-          const randomName = names[Math.floor(Math.random() * names.length)] + ` #${Math.floor(Math.random() * 900 + 100)}`;
-          
-          setSpectralPalette({
-            name: randomName,
-            gradient: `linear-gradient(135deg, hsl(${hue1}, 85%, 55%), hsl(${hue2}, 85%, 45%))`
-          });
+    const textToAnalyze = customPresetContext ? `DIRETRIZES: ${customPresetContext}\n\n${rawText.substring(0, 70000)}` : rawText.substring(0, 90000);
+
+    const systemPrompt = `Você é o Oráculo de Editais do StudyFlow. Sua tarefa é analisar o edital fornecido e estruturar um plano de estudos de alta performance.
+    
+    DIRETRIZ DE PRECISÃO DO EDITAL SEDES-DF:
+    - Se o edital ou texto fizer menção à assistência social do Distrito Federal (SEDES-DF), a banca organizadora é SEMPRE o INSTITUTO QUADRIX.
+    - O cargo principal é Especialista em Assistência Social e o salário inicial base é R$ 5.480,00.
+    - O plano de estudos DEVE mapear as disciplinas básicas (Língua Portuguesa, Raciocínio Lógico, LODF, Lei Complementar 840, Direito Administrativo, Direito Constitucional) e as específicas fundamentais (LOAS - Lei 8.742/93, SUAS, NOB-SUAS, PNAS, Tipificação Nacional de Serviços Socioassistenciais).
+    - Mapeie pelo menos de 5 a 8 matérias principais para garantir um plano de estudos realista e completo.
+    - Cada matéria deve incluir de 3 a 7 tópicos específicos organizados com prioridade ("Alta", "Média", "Baixa") e frequência estimada na banca organizadora.
+    
+    Retorne a resposta estritamente em formato JSON que obedeça ao esquema definido. Não insira blocos de texto ou explicações antes ou depois do JSON.`;
+
+    const responseSchema = {
+      type: "OBJECT",
+      properties: {
+        nomeConcurso: { type: "STRING" },
+        orgao: { type: "STRING" },
+        cargo: { type: "STRING" },
+        banca: { type: "STRING" },
+        dataProva: { type: "STRING" },
+        periodoInscricao: { type: "STRING" },
+        valorInscricao: { type: "STRING" },
+        requisitos: { type: "STRING" },
+        vagas: { type: "STRING" },
+        salario: { type: "STRING" },
+        materias: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              nomeMateria: { type: "STRING" },
+              topicos: {
+                type: "ARRAY",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    nome: { type: "STRING" },
+                    prioridade: { type: "STRING", enum: ["Alta", "Média", "Baixa"] },
+                    frequencia: { type: "STRING" },
+                    peso: { type: "NUMBER" }
+                  },
+                  required: ["nome", "prioridade", "frequencia", "peso"]
+                }
+              }
+            },
+            required: ["nomeMateria", "topicos"]
+          }
+        },
+        redacaoInfo: {
+          type: "OBJECT",
+          properties: {
+            possuiRedacao: { type: "BOOLEAN" },
+            criterios: { type: "STRING" },
+            temasProvaveis: { type: "ARRAY", items: { type: "STRING" } },
+            estruturaExigida: { type: "STRING" },
+            peso: { type: "STRING" }
+          },
+          required: ["possuiRedacao", "criterios", "temasProvaveis", "estruturaExigida", "peso"]
+        },
+        datasImportantes: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              evento: { type: "STRING" },
+              data: { type: "STRING" }
+            },
+            required: ["evento", "data"]
+          }
         }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+      },
+      required: ["nomeConcurso", "orgao", "cargo", "banca", "salario", "materias", "redacaoInfo", "datasImportantes"]
+    };
 
-  const handleGainXpAndStats = (xpGain: number, statType: 'int' | 'str') => {
-    setProfile((prev) => {
-      let newXp = prev.xp + xpGain;
-      let newLevel = prev.level;
-      let newMaxXp = prev.maxXp;
-      const updatedStats = { ...prev.stats };
+    const payload = {
+      contents: [{ parts: [{ text: `Efetue a análise rigorosa deste texto do edital:\n\n${textToAnalyze}` }] }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema
+      }
+    };
 
-      if (statType === 'int') updatedStats.int += 5;
-      if (statType === 'str') updatedStats.str += 5;
-      updatedStats.end += 2;
+    try {
+      const data = await fetchWithRetry(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
 
-      while (newXp >= newMaxXp) {
-        newLevel++;
-        newXp -= newMaxXp;
-        newMaxXp = Math.floor(newMaxXp * 1.25);
+      setProcessingProgress(95);
+      setProcessingStatus("Populando banco de dados estruturado do usuário...");
+
+      const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawJson) {
+        throw new Error("A IA devolveu um resultado vazio ou ilegível.");
       }
 
+      const parsed = JSON.parse(rawJson);
+
+      // Formatação e atribuição de IDs únicos aos novos dados importados
+      const formattedSubjects = parsed.materias.map((materia: any, mIdx: number) => ({
+        id: `m_imported_${Date.now()}_${mIdx}`,
+        nomeMateria: materia.nomeMateria,
+        topicos: materia.topicos.map((topico: any, tIdx: number) => ({
+          id: `t_imported_${Date.now()}_${mIdx}_${tIdx}`,
+          nome: topico.nome,
+          prioridade: topico.prioridade || 'Média',
+          frequencia: topico.frequencia || 'Sem dados',
+          peso: topico.peso || 1.0,
+          estudado: false,
+          revisado: false,
+          exercicios: false,
+          questoesFeitas: 0,
+          acertos: 0,
+          tempoEstudado: 0,
+          notas: ""
+        }))
+      }));
+
+      const novoConcurso: Concurso = {
+        id: `concurso_${Date.now()}`,
+        nomeConcurso: parsed.nomeConcurso,
+        orgao: parsed.orgao,
+        cargo: parsed.cargo,
+        banca: parsed.banca,
+        dataProva: parsed.dataProva || "Definir",
+        periodoInscricao: parsed.periodoInscricao || "Consultar Edital",
+        valorInscricao: parsed.valorInscricao || "Consultar",
+        requisitos: parsed.requisitos || "Consultar Edital",
+        vagas: parsed.vagas || "Não descrita",
+        salario: parsed.salario || "Não descrito",
+        datasImportantes: parsed.datasImportantes.map((dt: any, idx: number) => ({
+          id: `dt_${Date.now()}_${idx}`,
+          evento: dt.evento,
+          data: dt.data
+        })),
+        redacaoInfo: {
+          possuiRedacao: parsed.redacaoInfo?.possuiRedacao || false,
+          criterios: parsed.redacaoInfo?.criterios || "Sem detalhes da prova discursiva",
+          temasProvaveis: parsed.redacaoInfo?.temasProvaveis || [],
+          estruturaExigida: parsed.redacaoInfo?.estruturaExigida || "Dissertativa",
+          peso: parsed.redacaoInfo?.peso || "0",
+          treinos: []
+        },
+        materias: formattedSubjects
+      };
+
+      setConcursos(prev => [novoConcurso, ...prev]);
+      setSelectedConcursoId(novoConcurso.id);
+      addExp(50);
+      setSuccessMessage(`🔮 Oráculo: O Edital do concurso ${novoConcurso.nomeConcurso} foi totalmente indexado!`);
+      setIsProcessing(false);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(`Ocorreu um erro no processamento cognitivo da IA: ${err.message}`);
+      setIsProcessing(false);
+    }
+  };
+
+  // --- GERAÇÃO RÁPIDA DE DADOS POR ENCOMENDA DA IA ---
+  const handleLoadPresetWithAI = async (nomePreset: string) => {
+    let presetContext = "";
+    if (nomePreset === 'SEDES') {
+      presetContext = "Crie o edital completo da Secretaria de Desenvolvimento Social do Distrito Federal (SEDES-DF). A banca é o Instituto Quadrix. O cargo é de Especialista em Assistência Social. Crie matérias completas incluindo Português, LODF, Lei Complementar 840, Direito Administrativo, Constitucional, LOAS, SUAS e PNAS, todas com tópicos bem detalhados.";
+    } else if (nomePreset === 'PCDF') {
+      presetContext = "Crie o edital completo da Polícia Civil do Distrito Federal (PCDF) para o cargo de Agente de Polícia. A banca é o Cebraspe. O conteúdo programático deve incluir Português, Informática de alto nível, Raciocínio Lógico, Direito Constitucional, Administrativo, Penal, Processual Penal e Legislação Penal Especial.";
+    } else {
+      presetContext = "Crie o edital completo do Tribunal de Justiça do Distrito Federal e dos Territórios (TJDFT) para Técnico Judiciário da Área Administrativa. Banca FGV. Inclua Português, Direito Constitucional, Administrativo, Civil, Processual Civil, Processual Penal e Provimento Geral do TJDFT.";
+    }
+
+    await processEditalWithGemini("Geração acelerada de edital simulado de alto nível com base na base de conhecimento oficial do Gemini 2.5.", presetContext);
+  };
+
+  // --- MOTOR ANKI INTELECTUAL (FLASHCARDS POR TOPICO) ---
+  const generateAnkiForTopic = async (nomeTopico: string, nomeMateria: string) => {
+    setGeneratingCards(true);
+    setErrorMessage(null);
+
+    const prompt = `Gere exatamente 4 flashcards inteligentes de concurso público para o tópico "${nomeTopico}" da matéria "${nomeMateria}".
+    Retorne a resposta estritamente em um array de objetos JSON válido, onde cada objeto tem os campos: "front" (pergunta objectiva e profunda) e "back" (resposta resumida de alto valor pedagógico).
+    Evite introduções e respostas que fujam ao formato estruturado JSON.`;
+
+    const schema = {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          front: { type: "STRING" },
+          back: { type: "STRING" }
+        },
+        required: ["front", "back"]
+      }
+    };
+
+    try {
+      const response = await fetchWithRetry(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: schema
+            }
+          })
+        }
+      );
+
+      const jsonText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!jsonText) throw new Error("Falta de retorno de dados do servidor do Gemini.");
+
+      const novosCards = JSON.parse(jsonText).map((c: any, idx: number) => ({
+        id: `fc_ai_${Date.now()}_${idx}`,
+        front: c.front,
+        back: c.back,
+        subject: nomeMateria.replace("Conhecimentos Básicos - ", "").replace("Conhecimentos Específicos - ", ""),
+        ease: 2.5
+      }));
+
+      setFlashcards(prev => [...novosCards, ...prev]);
+      addExp(15);
+      setSuccessMessage(`📚 Grimório Anki: 4 novos flashcards de fixação gerados para o tópico "${nomeTopico}"!`);
+    } catch (err: any) {
+      setErrorMessage(`Ocorreu uma falha ao fabricar os flashcards: ${err.message}`);
+    } finally {
+      setGeneratingCards(false);
+    }
+  };
+
+  // --- OPERAÇÕES DO CONTROLE DE PROGRESSO ---
+  const toggleTopicMark = (subjectId: string, topicId: string, flag: 'estudado' | 'revisado' | 'exercicios') => {
+    setConcursos(prev => prev.map(c => {
+      if (c.id !== selectedConcursoId) return c;
       return {
-        ...prev,
-        xp: newXp,
-        level: newLevel,
-        maxXp: newMaxXp,
-        stats: updatedStats,
-        vitality: Math.min(100, prev.vitality + 8)
+        ...c,
+        materias: c.materias.map(m => {
+          if (m.id !== subjectId) return m;
+          return {
+            ...m,
+            topicos: m.topicos.map(t => {
+              if (t.id !== topicId) return t;
+              const nextVal = !t[flag];
+              if (nextVal) addExp(5); // Soma XP por acção concluída
+              return { ...t, [flag]: nextVal };
+            })
+          };
+        })
+      };
+    }));
+  };
+
+  const addTopicMetrics = (subjectId: string, topicId: string, feitas: number, acertos: number, tempo: number) => {
+    setConcursos(prev => prev.map(c => {
+      if (c.id !== selectedConcursoId) return c;
+      return {
+        ...c,
+        materias: c.materias.map(m => {
+          if (m.id !== subjectId) return m;
+          return {
+            ...m,
+            topicos: m.topicos.map(t => {
+              if (t.id !== topicId) return t;
+              addExp(10);
+              return {
+                ...t,
+                questoesFeitas: t.questoesFeitas + feitas,
+                acertos: t.acertos + acertos,
+                tempoEstudado: t.tempoEstudado + tempo
+              };
+            })
+          };
+        })
+      };
+    }));
+    setSelectedTopic(null);
+    setSuccessMessage("Métricas de estudo e desempenho contabilizadas no seu perfil!");
+  };
+
+  const saveTopicNotes = (subjectId: string, topicId: string, notes: string) => {
+    setConcursos(prev => prev.map(c => {
+      if (c.id !== selectedConcursoId) return c;
+      return {
+        ...c,
+        materias: c.materias.map(m => {
+          if (m.id !== subjectId) return m;
+          return {
+            ...m,
+            topicos: m.topicos.map(t => {
+              if (t.id !== topicId) return t;
+              return { ...t, notas: notes };
+            })
+          };
+        })
+      };
+    }));
+    setSuccessMessage("Suas anotações pessoais foram guardadas com sucesso no edital.");
+  };
+
+  // --- TREINO DE REDAÇÃO ---
+  const handleSaveTreinoRedacao = () => {
+    if (!newTema) return;
+    setConcursos(prev => prev.map(c => {
+      if (c.id !== selectedConcursoId) return c;
+      return {
+        ...c,
+        redacaoInfo: {
+          ...c.redacaoInfo,
+          treinos: [
+            ...c.redacaoInfo.treinos,
+            {
+              id: `tr_${Date.now()}`,
+              tema: newTema,
+              data: new Date().toLocaleDateString('pt-PT'),
+              nota: newNota,
+              feedback: newFeedback
+            }
+          ]
+        }
+      };
+    }));
+    setNewTema('');
+    setNewNota(0);
+    setNewFeedback('');
+    addExp(20);
+    setSuccessMessage("Resultado de treino de redação anotado no histórico oficial!");
+  };
+
+  // --- EXCLUSÃO DE CONCURSO ---
+  const handleRemoveConcurso = (idToRemove: string) => {
+    if (concursos.length <= 1) {
+      setErrorMessage("Você precisa manter ao menos 1 edital ativo para estudos.");
+      return;
+    }
+    const actual = concursos.filter(c => c.id !== idToRemove);
+    setConcursos(actual);
+    setSelectedConcursoId(actual[0].id);
+    setSuccessMessage("O Edital foi removido das suas bases locais com sucesso.");
+  };
+
+  // --- MÉTRICAS DE CÁLCULO GERAIS ---
+  const getOverallProgress = (concurso: Concurso) => {
+    let total = 0;
+    let checked = 0;
+    concurso.materias.forEach(m => {
+      m.topicos.forEach(t => {
+        total += 3;
+        if (t.estudado) checked++;
+        if (t.revisado) checked++;
+        if (t.exercicios) checked++;
+      });
+    });
+    return total > 0 ? Math.round((checked / total) * 100) : 0;
+  };
+
+  const getOverallAccuracy = (concurso: Concurso) => {
+    let resolvidas = 0;
+    let acertos = 0;
+    concurso.materias.forEach(m => {
+      m.topicos.forEach(t => {
+        resolvidas += t.questoesFeitas;
+        acertos += t.acertos;
+      });
+    });
+    return resolvidas > 0 ? Math.round((acertos / resolvidas) * 100) : 0;
+  };
+
+  const getHoursStudied = (concurso: Concurso) => {
+    let totalMins = 0;
+    concurso.materias.forEach(m => {
+      m.topicos.forEach(t => {
+        totalMins += t.tempoEstudado;
+      });
+    });
+    return Math.round(totalMins / 60);
+  };
+
+  const getRadarMetrics = () => {
+    return activeConcurso.materias.map(m => {
+      let total = m.topicos.length * 3;
+      let check = 0;
+      m.topicos.forEach(t => {
+        if (t.estudado) check++;
+        if (t.revisado) check++;
+        if (t.exercicios) check++;
+      });
+      return {
+        subject: m.nomeMateria.length > 20 ? m.nomeMateria.substring(0, 18) + "..." : m.nomeMateria,
+        Aproveitamento: total > 0 ? Math.round((check / total) * 100) : 0,
+        fullMark: 100
       };
     });
   };
 
-  const handleAddQuestionLog = (subjectId: string, total: number, correct: number) => {
-    if (total <= 0 || correct < 0 || correct > total) return;
+  const getDaysLeft = (dateStr: string) => {
+    if (!dateStr || dateStr === "Definir" || dateStr === "Previsto") return "Por Definir";
+    const examDate = new Date(dateStr);
+    const today = new Date();
+    const diff = examDate.getTime() - today.getTime();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return days > 0 ? `${days} dias` : "Fim do Prazo!";
+  };
+
+  const getOverlapPercentage = (cRef: Concurso, cComp: Concurso) => {
+    if (cRef.id === cComp.id) return 100;
+    let hits = 0;
+    const sRef = cRef.materias.map(m => m.nomeMateria.toLowerCase()).join(" ");
+    const sComp = cComp.materias.map(m => m.nomeMateria.toLowerCase()).join(" ");
     
-    const subject = subjects.find(s => s.id === subjectId);
-    if (!subject) return;
-
-    const newAccuracy = Math.round((correct / total) * 100);
-    const xpCalculated = correct * 15 + (total - correct) * 5;
-
-    const newLogEntry: QuestionLog = {
-      id: `l_${Date.now()}`,
-      subject: subject.name,
-      total,
-      correct,
-      xpGained: xpCalculated,
-      timestamp: 'Agora mesmo'
-    };
-
-    setLogs(prev => [newLogEntry, ...prev]);
-
-    setSubjects(prev => prev.map(s => {
-      if (s.id === subjectId) {
-        const totalAccuracy = Math.round((s.accuracy + newAccuracy) / 2);
-        return {
-          ...s,
-          progress: Math.min(100, s.progress + Math.round(total / 4)),
-          accuracy: totalAccuracy,
-          mastery: totalAccuracy > 85 ? 'Mestre' : totalAccuracy > 65 ? 'Adepto' : 'Iniciado'
-        };
-      }
-      return s;
-    }));
-
-    handleGainXpAndStats(xpCalculated, 'str');
-  };
-
-  const handleToggleSyllabusMetric = (
-    examId: string,
-    subjectName: string,
-    topicName: string,
-    metric: 'completed' | 'reviewed' | 'exercisesDone'
-  ) => {
-    setExamFolders(prevExams => 
-      prevExams.map(exam => {
-        if (exam.id !== examId) return exam;
-
-        const updatedSyllabus = exam.syllabus.map(subj => {
-          if (subj.subjectName !== subjectName) return subj;
-
-          const updatedTopics = subj.topics.map(topic => {
-            if (topic.topicName !== topicName) return topic;
-            const nextValue = !topic[metric];
-            let increment = 0;
-            if (nextValue) {
-              increment = 60;
-              if (metric === 'exercisesDone') {
-                topic.questionsCount += 10;
-                topic.correctAnswers += 8;
-              }
-              handleGainXpAndStats(increment, 'int');
-            }
-            return { 
-              ...topic, 
-              [metric]: nextValue,
-              lastStudied: nextValue ? 'Hoje' : topic.lastStudied,
-              revisionsCount: metric === 'reviewed' && nextValue ? topic.revisionsCount + 1 : topic.revisionsCount
-            };
-          });
-          return { ...subj, topics: updatedTopics };
-        });
-        
-        let totalCount = 0;
-        let checkedCount = 0;
-        updatedSyllabus.forEach(s => s.topics.forEach(t => {
-          totalCount += 3;
-          if (t.completed) checkedCount++;
-          if (t.reviewed) checkedCount++;
-          if (t.exercisesDone) checkedCount++;
-        }));
-        const calculatedProbability = Math.min(98, Math.max(10, Math.round((checkedCount / (totalCount || 1)) * 100)));
-
-        return { 
-          ...exam, 
-          syllabus: updatedSyllabus,
-          approvalProbability: calculatedProbability
-        };
-      })
-    );
-  };
-
-  const handleTriggerAiEditalAnalysis = async () => {
-    if (!aiInputText.trim()) {
-      setAiNotification({
-        message: 'Por favor, insira ou cole o conteúdo do edital para o Oráculo ler.',
-        type: 'info'
-      });
-      return;
-    }
-
-    setIsAiProcessing(true);
-    setAiNotification({ message: 'Conectando ao núcleo cognitivo do Gemini...', type: 'info' });
-
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Analise as informações programáticas e regras do edital a seguir: "${aiInputText}". Extraia e responda exclusivamente em JSON formatado de acordo com a estrutura do aplicativo.` }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                "examName": { "type": "STRING" },
-                "banca": { "type": "STRING" },
-                "salary": { "type": "STRING" },
-                "vagas": { "type": "STRING" },
-                "examSystemDescription": { "type": "STRING" },
-                "registrationStart": { "type": "STRING" },
-                "registrationEnd": { "type": "STRING" },
-                "examDate": { "type": "STRING" },
-                "overlapAnalysis": { "type": "STRING" },
-                "bancaStyleExplanation": { "type": "STRING" },
-                "syllabus": {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      "subjectName": { "type": "STRING" },
-                      "topics": {
-                        type: "ARRAY",
-                        items: {
-                          type: "OBJECT",
-                          properties: {
-                            "topicName": { "type": "STRING" }
-                          },
-                          required: ["topicName"]
-                        }
-                      }
-                    },
-                    required: ["subjectName", "topics"]
-                  }
-                }
-              },
-              required: ["examName", "banca", "salary", "vagas", "examSystemDescription", "registrationStart", "registrationEnd", "examDate", "overlapAnalysis", "bancaStyleExplanation", "syllabus"]
-            }
-          }
-        })
-      });
-
-      const data = await response.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (rawText) {
-        const parsed = JSON.parse(rawText);
-        const newExamId = parsed.examName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        
-        const mappedSyllabus: VerticalizedSubject[] = parsed.syllabus.map((s: any) => ({
-          subjectName: s.subjectName,
-          topics: s.topics.map((t: any) => ({
-            topicName: t.topicName,
-            completed: false,
-            reviewed: false,
-            exercisesDone: false,
-            questionsCount: 0,
-            correctAnswers: 0,
-            difficulty: 3,
-            lastStudied: 'Nunca',
-            revisionsCount: 0
-          }))
-        }));
-
-        const newExamFolder: ExamFolder = {
-          id: newExamId,
-          title: parsed.examName,
-          institution: parsed.examName + ' Corporation',
-          banca: parsed.banca,
-          salary: parsed.salary,
-          vagas: parsed.vagas,
-          examSystemDescription: parsed.examSystemDescription,
-          registrationStart: parsed.registrationStart,
-          registrationEnd: parsed.registrationEnd,
-          examDate: parsed.examDate,
-          overlapAnalysis: parsed.overlapAnalysis,
-          bancaStyleExplanation: parsed.bancaStyleExplanation,
-          approvalProbability: 15,
-          syllabus: mappedSyllabus
-        };
-
-        setExamFolders(prev => [newExamFolder, ...prev]);
-        setActiveExamId(newExamId);
-        setAiNotification({ message: `Sucesso! Subpasta de estudo para "${parsed.examName}" configurada e estruturada.`, type: 'success' });
-        setAiInputText('');
-        handleGainXpAndStats(600, 'int');
-      } else {
-        throw new Error("API return empty text");
-      }
-    } catch (err) {
-      console.warn("Using offline fallback parser", err);
-      
-      const text = aiInputText.toLowerCase();
-      let parsedTitle = 'Novo Concurso';
-      let parsedInstitution = 'Órgão de Governo';
-      let parsedBanca = 'A Definir';
-      let parsedSalary = 'R$ 6.200,00';
-      let parsedVagas = '80 + CR';
-      let parsedExamDate = '2026-11-20';
-      let parsedRegistrationStart = '2026-06-01';
-      let parsedRegistrationEnd = '2026-07-15';
-      let parsedSystemDesc = 'Múltipla escolha tradicional com 5 alternativas.';
-      let parsedBancaStyle = 'A banca exige leitura atenta de regimentos e decretos.';
-      let parsedSyllabus: VerticalizedSubject[] = [];
-
-      // 1. Detect SEDES-DF (Heurística avançada de Assistência Social e DF)
-      if (text.includes('sedes') || text.includes('desenvolvimento social') || text.includes('assistência social') || text.includes('loas') || text.includes('suas')) {
-        parsedTitle = 'SEDES-DF';
-        parsedInstitution = 'Secretaria de Desenvolvimento Social do DF';
-        parsedBanca = text.includes('iades') ? 'IADES' : 'IADES (Previsto)';
-        parsedSalary = 'R$ 5.480,00';
-        parsedVagas = '120 + CR';
-        parsedSystemDesc = 'Prova objetiva de 50 questões de múltipla escolha (A, B, C, D, E) com alto peso em assistência social.';
-        parsedBancaStyle = 'A banca IADES prioriza a literalidade da Lei Orgânica de Assistência Social (LOAS) e do regimento interno.';
-        parsedSyllabus = [
-          {
-            subjectName: 'Conhecimentos Gerais (SEDES)',
-            topics: [
-              { topicName: 'Lei Orgânica de Assistência Social (LOAS)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 },
-              { topicName: 'Sistema Único de Assistência Social (SUAS)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
-              { topicName: 'Política Nacional de Assistência Social (PNAS)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 }
-            ]
-          },
-          {
-            subjectName: 'Direito e Legislação',
-            topics: [
-              { topicName: 'Estatuto da Criança e do Adolescente (ECA)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
-              { topicName: 'Estatuto do Idoso', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 2, lastStudied: 'Nunca', revisionsCount: 0 }
-            ]
-          }
-        ];
-      } 
-      // 2. Detect DER-DF
-      else if (text.includes('der') || text.includes('rodagem') || text.includes('trânsito') || text.includes('ctb')) {
-        parsedTitle = 'DER-DF';
-        parsedInstitution = 'Departamento de Estradas de Rodagem do DF';
-        parsedBanca = 'IADES';
-        parsedSalary = 'R$ 7.200,00';
-        parsedVagas = '85';
-        parsedSystemDesc = 'Múltipla escolha com forte peso no Código de Trânsito Brasileiro.';
-        parsedBancaStyle = 'Exige memorização de regras gerais de circulação e conduta e resoluções do CONTRAN.';
-        parsedSyllabus = [
-          {
-            subjectName: 'Legislação Rodoviária',
-            topics: [
-              { topicName: 'Código de Trânsito Brasileiro (CTB)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
-              { topicName: 'Normas Gerais de Circulação e Conduta', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 }
-            ]
-          }
-        ];
-      }
-      // 3. Detect CLDF
-      else if (text.includes('cldf') || text.includes('câmara legislativa') || text.includes('parlamentar')) {
-        parsedTitle = 'CLDF';
-        parsedInstitution = 'Câmara Legislativa do Distrito Federal';
-        parsedBanca = 'FGV';
-        parsedSalary = 'R$ 16.500,00';
-        parsedVagas = '42';
-        parsedSystemDesc = 'Múltipla escolha de alta complexidade com enunciados interpretativos longos.';
-        parsedBancaStyle = 'A FGV foca em análise pesada de casos práticos constitucionais e exegese gramatical.';
-        parsedSyllabus = [
-          {
-            subjectName: 'Regimento Interno',
-            topics: [
-              { topicName: 'Processo Legislativo Constitucional', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 },
-              { topicName: 'Regimento Interno da CLDF', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 }
-            ]
-          }
-        ];
-      }
-      else {
-        parsedTitle = 'Novo Concurso';
-        parsedInstitution = 'Órgão Geral';
-        parsedBanca = 'Padrão';
-        parsedSyllabus = [
-          {
-            subjectName: 'Matérias Gerais',
-            topics: [
-              { topicName: 'Língua Portuguesa Instrumental', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 },
-              { topicName: 'Direito Administrativo Aplicado', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 }
-            ]
-          }
-        ];
-      }
-
-      const randomId = 'custom_' + Date.now();
-      const mockResult: ExamFolder = {
-        id: randomId,
-        title: parsedTitle,
-        institution: parsedInstitution,
-        banca: parsedBanca,
-        salary: parsedSalary,
-        vagas: parsedVagas,
-        examSystemDescription: parsedSystemDesc,
-        registrationStart: parsedRegistrationStart,
-        registrationEnd: parsedRegistrationEnd,
-        examDate: parsedExamDate,
-        overlapAnalysis: `Sua preparação atual possui alta compatibilidade com o edital do ${parsedTitle}.`,
-        bancaStyleExplanation: parsedBancaStyle,
-        approvalProbability: 45,
-        syllabus: parsedSyllabus
-      };
-
-      setExamFolders(prev => [mockResult, ...prev]);
-      setActiveExamId(randomId);
-      setAiNotification({ message: `Concurso "${parsedTitle}" mapeado e adicionado com sucesso!`, type: 'success' });
-      setAiInputText('');
-      handleGainXpAndStats(600, 'int');
-    } finally {
-      setIsAiProcessing(false);
-    }
-  };
-
-  const handleGenerateAnkiCards = async () => {
-    if (!ankiInputText.trim()) {
-      alert("Adicione um resumo, lei seca ou anotação para invocar.");
-      return;
-    }
-
-    setIsAnkiGenerating(true);
-
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Gere uma lista de flashcards baseada no seguinte conteúdo: "${ankiInputText}". Estilo da banca: "${selectedBanca}".` }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  "type": { "type": "STRING" },
-                  "subject": { "type": "STRING" },
-                  "banca": { "type": "STRING" },
-                  "front": { "type": "STRING" },
-                  "back": { "type": "STRING" },
-                  "explanation": { "type": "STRING" },
-                  "clozeAnswer": { "type": "STRING" }
-                },
-                required: ["type", "subject", "front", "back", "explanation"]
-              }
-            }
-          }
-        })
-      });
-
-      const data = await response.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (rawText) {
-        const parsedCards = JSON.parse(rawText);
-        const mapped: Flashcard[] = parsedCards.map((c: any, index: number) => ({
-          id: `ai_card_${Date.now()}_${index}`,
-          type: c.type || 'standard',
-          subject: c.subject || 'Geral',
-          banca: c.banca || selectedBanca,
-          front: c.front,
-          back: c.back,
-          explanation: c.explanation,
-          clozeAnswer: c.clozeAnswer || '',
-          difficultyRating: 3,
-          easeFactor: 2.5,
-          repetitions: 0,
-          intervalDays: 1,
-          nextReviewDate: new Date()
-        }));
-
-        setFlashcards(prev => [...mapped, ...prev]);
-        setAnkiInputText('');
-        handleGainXpAndStats(300, 'int');
-        alert(`Sucesso! O Oráculo gerou ${mapped.length} Flashcards Inteligentes.`);
-      } else {
-        throw new Error("API return empty text");
-      }
-    } catch (e) {
-      console.warn("Anki AI Fallback active", e);
-      const fallback: Flashcard[] = [
-        {
-          id: `fallback_${Date.now()}_1`,
-          type: 'trap',
-          subject: 'Direito Constitucional',
-          banca: selectedBanca,
-          front: 'A investidura em cargo ou emprego público independe de aprovação prévia em concurso público?',
-          back: 'ERRADO. A regra constitucional do Art. 37, II exige a aprovação em concurso, exceto para as nomeações de cargo em comissão declarados em lei de livre nomeação.',
-          explanation: 'Meteoro das Bancas: A exceção cai mais que a regra! "Cargos em comissão" não passam por concurso.',
-          difficultyRating: 3,
-          easeFactor: 2.5,
-          repetitions: 0,
-          intervalDays: 1,
-          nextReviewDate: new Date()
-        }
-      ];
-      setFlashcards(prev => [...fallback, ...prev]);
-      setAnkiInputText('');
-      handleGainXpAndStats(150, 'int');
-    } finally {
-      setIsAnkiGenerating(false);
-    }
-  };
-
-  const handleRateAnkiCard = (rating: 1 | 2 | 3 | 4) => {
-    const updatedCards = [...flashcards];
-    const card = updatedCards[activeCardIndex];
-
-    if (!card) return;
-
-    let newEaseFactor = card.easeFactor;
-    let newRepetitions = card.repetitions;
-    let newInterval = card.intervalDays;
-
-    if (rating === 1) {
-      newRepetitions = 0;
-      newInterval = 1;
-      newEaseFactor = Math.max(1.3, card.easeFactor - 0.2);
-      handleGainXpAndStats(20, 'str');
-    } else {
-      newRepetitions += 1;
-      if (newRepetitions === 1) {
-        newInterval = 1;
-      } else if (newRepetitions === 2) {
-        newInterval = 3;
-      } else {
-        newInterval = Math.round(card.intervalDays * card.easeFactor);
-      }
-
-      if (rating === 2) {
-        newEaseFactor = Math.max(1.3, card.easeFactor - 0.15);
-        handleGainXpAndStats(80, 'str');
-      } else if (rating === 3) {
-        handleGainXpAndStats(150, 'int');
-      } else if (rating === 4) {
-        newEaseFactor = card.easeFactor + 0.15;
-        handleGainXpAndStats(250, 'int');
-      }
-    }
-
-    const nextReview = new Date();
-    nextReview.setDate(nextReview.getDate() + newInterval);
-
-    card.easeFactor = parseFloat(newEaseFactor.toFixed(2));
-    card.repetitions = newRepetitions;
-    card.intervalDays = newInterval;
-    card.nextReviewDate = nextReview;
-
-    setFlashcards(updatedCards);
-    setIsFlipped(false);
-    setClozeRevealed(false);
-
-    if (activeCardIndex < updatedCards.length - 1) {
-      setActiveCardIndex(prev => prev + 1);
-    } else {
-      setActiveCardIndex(0);
-    }
-  };
-
-  const prefillSamplePreset = (type: 'sedes' | 'der' | 'cldf') => {
-    const textPresets = {
-      sedes: "CONCURSO SECRETARIA DE DESENVOLVIMENTO SOCIAL (SEDES-DF). Banca IADES. Prova dia 26/08/2026. Inscrições de 10/05/2026 a 15/06/2026. Salário R$ 5.480,00. Vagas: 120 + CR. Matérias: Compreensão de texto, concordância verbal, Lei Orgânica da Assistência Social (LOAS), SUAS.",
-      der: "DEPARTAMENTO DE ESTRADAS DE RODAGEM DO DF (DER-DF). Banca IADES. Prova dia 25/10/2026. Salário R$ 7.200,00. Vagas: 85. Conteúdo: Legislação de Trânsito específica de estradas, CTB, sinalização e Português.",
-      cldf: "CÂMARA LEGISLATIVA DO DF (CLDF). Banca FGV. Provas dia 06/12/2026. Salário R$ 16.500,00. Vagas: 42. Matérias: Regimento Interno, Processo Legislativo Constitucional, Direitos e Garantias Fundamentais, Organização dos Poderes."
-    };
-    setAiInputText(textPresets[type]);
-  };
-
-  const filteredCards = useMemo(() => {
-    if (bancaFilter === 'TODOS') return flashcards;
-    return flashcards.filter(c => c.banca === bancaFilter || c.subject === bancaFilter);
-  }, [flashcards, bancaFilter]);
-
-  const activeCard = filteredCards[activeCardIndex] || filteredCards[0];
-
-  const renderClozeText = (text: string, reveal: boolean) => {
-    const regex = /\{\{c1::(.*?)\}\}/g;
-    if (reveal) {
-      return text.replace(regex, "<strong>$1</strong>");
-    }
-    return text.replace(regex, `<span class="bg-indigo-600/30 border border-dashed border-indigo-500 px-3 py-1 rounded mx-1 text-indigo-200 cursor-pointer hover:bg-indigo-600/50 transition-all font-black text-xs">REVELAR CLOZE (CLIQUE AQUI)</span>`);
+    const keyTerms = ["portugues", "direito", "administrativo", "constitucional", "raciocinio", "social", "loas", "suas", "legislacao"];
+    keyTerms.forEach(term => {
+      if (sRef.includes(term) && sComp.includes(term)) hits++;
+    });
+    return Math.round((hits / keyTerms.length) * 100);
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-slate-300 flex font-sans selection:bg-indigo-500/30 overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col antialiased selection:bg-violet-500/30 selection:text-violet-200">
       
-      {/* Sidebar - Archmage Premium Navigation */}
-      <aside className="w-64 border-r border-white/5 flex flex-col p-6 hidden lg:flex bg-[#020617] h-screen sticky top-0">
-        <div className="flex items-center gap-3 mb-10 px-2">
-          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Wand2 size={20} className="text-white" />
+      {/* ALERTA FLUTUANTE DE SUCESSO OU ERRO */}
+      {successMessage && (
+        <div className="fixed top-4 right-4 z-50 bg-violet-900/90 border border-violet-500 text-violet-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md animate-fade-in">
+          <Sparkles className="text-yellow-400 animate-pulse" size={18} />
+          <span className="text-xs font-semibold">{successMessage}</span>
+          <button onClick={() => setSuccessMessage(null)} className="text-xs text-violet-300 hover:text-white ml-2">✕</button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="fixed top-4 right-4 z-50 bg-rose-950/90 border border-rose-500 text-rose-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 backdrop-blur-md">
+          <AlertCircle className="text-rose-400" size={18} />
+          <span className="text-xs font-semibold">{errorMessage}</span>
+          <button onClick={() => setErrorMessage(null)} className="text-xs text-rose-300 hover:text-white ml-2">✕</button>
+        </div>
+      )}
+
+      {/* PAINEL DE CABEÇALHO GAMIFICADO */}
+      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 opacity-75 blur animate-pulse"></div>
+            <div className="relative bg-slate-950 p-2 rounded-full border border-violet-500/40">
+              <Brain className="text-violet-400" size={24} />
+            </div>
           </div>
-          <span className="font-black text-xl text-white italic tracking-tighter">STUDYFLOW</span>
+          <div>
+            <h1 className="text-lg font-black tracking-tight bg-gradient-to-r from-white via-slate-100 to-violet-300 bg-clip-text text-transparent">
+              StudyFlow <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-violet-900/50 border border-violet-500/30 text-violet-300">Archmage Edition v3</span>
+            </h1>
+            <p className="text-[10px] text-slate-400">Inteligência Estruturada para Concursos Públicos</p>
+          </div>
         </div>
 
-        <nav className="space-y-2 flex-1">
-          <button 
-            onClick={() => setActiveTab('dashboard')} 
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'dashboard' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-white'
-            }`}
-          >
-            <LayoutDashboard size={18} />
-            <span className="font-bold text-xs text-left">Painel de Alquimia</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('concursos')} 
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'concursos' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Layers size={18} />
-              <span className="font-bold text-xs text-left">Central Concursos</span>
+        {/* STATUS DE DESEMPENHO E GAMIFICAÇÃO */}
+        <div className="flex items-center gap-4 bg-slate-900/40 border border-slate-800 rounded-2xl px-4 py-1.5">
+          <div className="flex items-center gap-1.5 border-r border-slate-800 pr-3">
+            <Flame className="text-orange-500 fill-orange-500 animate-pulse" size={18} />
+            <div>
+              <div className="text-xs font-extrabold text-slate-100">{streak} dias</div>
+              <div className="text-[9px] text-slate-500 uppercase tracking-widest">Ritmo</div>
             </div>
-            <span className="bg-indigo-500/20 text-indigo-400 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase">IA</span>
-          </button>
+          </div>
 
-          <button 
-            onClick={() => setActiveTab('flashcards')} 
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'flashcards' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <GraduationCap size={18} />
-              <span className="font-bold text-xs text-left">Grimório Anki AI</span>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center font-black text-sm text-white shadow-md shadow-violet-950/40">
+              {level}
             </div>
-            <span className="bg-emerald-500/20 text-emerald-400 text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase">SRS</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('subjects')} 
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'subjects' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-white'
-            }`}
-          >
-            <BookOpen size={18} />
-            <span className="font-bold text-xs text-left">Grimório de Matérias</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('lab')} 
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'lab' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-white'
-            }`}
-          >
-            <BarChart3 size={18} />
-            <span className="font-bold text-xs text-left">Laboratório de IA</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('timer')} 
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'timer' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-white'
-            }`}
-          >
-            <Clock size={18} />
-            <span className="font-bold text-xs text-left">Modo Foco Arcano</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('chronicles')} 
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-              activeTab === 'chronicles' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-white'
-            }`}
-          >
-            <History size={18} />
-            <span className="font-bold text-xs text-left">Crônicas de Estudos</span>
-          </button>
-        </nav>
-
-        {/* Level progress bar */}
-        <div className="mt-auto border-t border-white/5 pt-6">
-          <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5">
-            <div className="flex justify-between text-[9px] font-black text-slate-500 uppercase mb-2">
-              <span>Nível {profile.level}</span>
-              <span>{Math.round((profile.xp / profile.maxXp) * 100)}%</span>
+            <div>
+              <div className="text-[9px] font-bold text-violet-400 uppercase tracking-wider">Mago dos Estudos</div>
+              <div className="w-24 bg-slate-950 h-1.5 rounded-full border border-slate-800 mt-1 relative overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-violet-500 to-fuchsia-500 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${exp}%` }}
+                ></div>
+              </div>
             </div>
-            <ProgressBar progress={(profile.xp / profile.maxXp) * 100} color="#6366f1" />
           </div>
         </div>
-      </aside>
+      </header>
 
-      {/* Main Container Area */}
-      <main className="flex-1 overflow-y-auto min-h-screen">
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 sticky top-0 bg-[#020617]/80 backdrop-blur-md z-30">
-          <div className="flex items-center gap-4">
-            <Sparkle size={18} className="text-indigo-400" />
-            <h2 className="text-sm font-bold text-white tracking-widest uppercase">Estação de Trabalho do Arquimago</h2>
-            
-            {/* Cognitive Mode Switcher */}
-            <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-white/10 ml-4">
-              <button 
-                onClick={() => setStudyMode('iniciante')}
-                className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight transition-all ${
-                  studyMode === 'iniciante' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-                }`}
+      {/* ÁREA DE TRABALHO PRINCIPAL */}
+      <div className="flex flex-1 flex-col lg:flex-row">
+        
+        {/* BARRA DE NAVEGAÇÃO LATERAL */}
+        <aside className="w-full lg:w-64 bg-slate-950 border-r border-slate-900 p-4 flex flex-col gap-2">
+          <div className="text-[9px] font-bold text-slate-500 tracking-widest uppercase px-3 mb-2">Módulos</div>
+          
+          <button 
+            onClick={() => setActiveTab('concursos')}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeTab === 'concursos' ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'}`}
+          >
+            <BookOpen size={16} />
+            Central de Concursos
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeTab === 'dashboard' ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'}`}
+          >
+            <TrendingUp size={16} />
+            Métricas de Evolução
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('anki')}
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${activeTab === 'anki' ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/30' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'}`}
+          >
+            <Brain size={16} />
+            Grimório Anki
+          </button>
+
+          <div className="mt-6 pt-6 border-t border-slate-900">
+            <div className="text-[9px] font-bold text-slate-500 tracking-widest uppercase px-3 mb-2">Edital Ativo</div>
+            <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-3">
+              <select 
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1 px-2 text-[11px] text-violet-300 font-bold focus:outline-none focus:border-violet-500"
+                value={selectedConcursoId}
+                onChange={(e) => setSelectedConcursoId(e.target.value)}
               >
-                Iniciante
-              </button>
-              <button 
-                onClick={() => setStudyMode('guerra')}
-                className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight transition-all ${
-                  studyMode === 'guerra' ? 'bg-red-600/30 text-red-400 border border-red-500/20 shadow' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Modo Guerra
-              </button>
+                {concursos.map(c => (
+                  <option key={c.id} value={c.id}>{c.nomeConcurso}</option>
+                ))}
+              </select>
+              <div className="mt-2 text-[10px] text-slate-500 flex justify-between">
+                <span>Total de Editais:</span>
+                <span className="font-bold text-slate-300">{concursos.length}</span>
+              </div>
             </div>
           </div>
+        </aside>
 
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">
-              <Flame size={14} className="text-amber-500" fill="currentColor" />
-              <span className="text-[10px] font-black text-amber-500">{profile.streak} DIAS SEGUIDOS</span>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center text-slate-400">
-              <Bell size={18} />
-            </div>
-          </div>
-        </header>
-
-        <div className="p-8 max-w-7xl mx-auto">
-          <AnimatePresence mode="wait">
-            
-            {/* TAB 1: DASHBOARD PANEL */}
-            {activeTab === 'dashboard' && (
-              <motion.div 
-                key="dashboard"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
-              >
-                {/* Cognitive Mentoring Notification Card */}
-                {studyMode === 'iniciante' ? (
-                  <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-3xl flex items-start gap-3.5">
-                    <BrainCircuit size={22} className="text-indigo-400 mt-1 shrink-0" />
-                    <div>
-                      <h4 className="text-xs font-black text-white uppercase tracking-wider mb-0.5">Explicação do Oráculo (Modo Iniciante)</h4>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Bem-vindo ao seu ecossistema, Willian Nunes. Este painel integra a estatística fria dos concursos com a inteligência do seu Mago do Conhecimento. Cada progresso e simulado injeta cor (Alquimia Espectral) na sua foto e evolui sua Inteligência (INT). Concentre-se no edital do <span className="text-indigo-400 font-bold">{activeExam.title}</span> hoje!
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-3xl flex items-start gap-3.5">
-                    <Target size={22} className="text-red-400 mt-1 shrink-0" />
-                    <div>
-                      <h4 className="text-xs font-black text-red-400 uppercase tracking-wider mb-0.5">Retícula Militar de Estudos (Modo Guerra Ativo)</h4>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Foco exclusivo em reta final do edital <span className="font-bold text-white">{activeExam.title}</span>. Menos teoria, foco total em simulados dinâmicos e cartões tipo Trap da banca organizadora. Revisões pendentes marcadas no topo. Não pare agora!
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  
-                  {/* Dynamic RPG Avatar Profile container */}
-                  <GlassCard className="lg:col-span-4 p-8 flex flex-col items-center bg-gradient-to-b from-indigo-500/5 to-transparent relative">
-                    <div className="absolute top-4 right-4">
-                      <label className="cursor-pointer p-2 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600/20 transition-all rounded-xl text-[10px] font-black text-indigo-400 flex items-center gap-1">
-                        <Upload size={12} />
-                        Conjurar Mago
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handleImageUpload} 
-                          className="hidden" 
-                        />
-                      </label>
-                    </div>
-
-                    <WizardAvatar 
-                      level={profile.level} 
-                      vitality={profile.vitality} 
-                      streak={profile.streak} 
-                      imageUrl={avatarImage} 
-                      palette={spectralPalette}
-                    />
-                    
-                    <h2 className="text-lg font-black text-white mt-4">{profile.name}</h2>
-
-                    {/* Character RPG Stats */}
-                    <div className="w-full grid grid-cols-3 gap-4 mt-6 border-t border-white/5 pt-6">
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Inteligência (INT)</p>
-                        <p className="text-base font-bold text-indigo-400">{profile.stats.int}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Poder Físico (STR)</p>
-                        <p className="text-base font-bold text-rose-400">{profile.stats.str}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Vitalidade</p>
-                        <p className="text-base font-bold text-emerald-400">{profile.vitality}%</p>
-                      </div>
-                    </div>
-
-                    <div className="w-full mt-6 space-y-2.5">
-                      <button 
-                        onClick={() => handleGainXpAndStats(300, 'int')}
-                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
-                      >
-                        <BrainCircuit size={14} /> Estudar Grimório (+300 XP)
-                      </button>
-                      <button 
-                        onClick={() => handleGainXpAndStats(150, 'str')}
-                        className="w-full py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
-                      >
-                        <Sword size={14} /> Batalhar Questões (+150 XP)
-                      </button>
-                    </div>
-                  </GlassCard>
-
-                  {/* Visual Learning Evolution Area Chart */}
-                  <GlassCard className="lg:col-span-8 p-8">
-                    <div className="flex justify-between items-center mb-10">
-                      <div>
-                        <h3 className="text-md font-bold text-white">Evolução Cósmica</h3>
-                        <p className="text-xs text-slate-500">Curva de ganho de XP e evolução do Mago</p>
-                      </div>
-                      <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 text-[9px] font-black rounded-lg border border-emerald-500/20 uppercase tracking-widest">Canalização Ativa</span>
-                    </div>
-                    <div className="h-[280px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={CHART_DATA}>
-                          <defs>
-                            <linearGradient id="glowColor" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35}/>
-                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                          <XAxis dataKey="name" stroke="#64748b" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                          <YAxis stroke="#64748b" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                          <Tooltip 
-                            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
-                            itemStyle={{ color: '#fff', fontSize: '11px' }}
-                          />
-                          <Area type="monotone" dataKey="xp" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#glowColor)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </GlassCard>
-                </div>
-
-                {/* Subfolder Switches Row */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  <div className="lg:col-span-6">
-                    <GlassCard className="p-6">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-sm font-bold text-white">Subpastas de Concursos Ativos</h3>
-                        <span className="text-[10px] text-slate-500 font-bold uppercase">Mudar o foco ativamente</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-3">
-                        {examFolders.map(folder => {
-                          const isActive = folder.id === activeExamId;
-                          return (
-                            <button 
-                              key={folder.id}
-                              onClick={() => {
-                                setActiveExamId(folder.id);
-                                setProfile(p => ({ ...p, vitality: Math.min(100, p.vitality + 5) }));
-                              }}
-                              className={`p-4 rounded-2xl border text-left transition-all ${
-                                isActive 
-                                  ? 'bg-indigo-600/10 border-indigo-500 shadow-lg shadow-indigo-500/5' 
-                                  : 'bg-white/5 border-white/5 hover:border-white/10'
-                              }`}
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 mb-3">
-                                <Layers size={16} />
-                              </div>
-                              <span className="text-xs font-black text-white uppercase tracking-tight block">{folder.title}</span>
-                              <span className="text-[9px] text-slate-500 font-bold block mt-0.5 truncate">{folder.banca}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Display active selection analytics metadata */}
-                      <div className="mt-4 p-4 bg-white/5 border border-white/5 rounded-2xl">
-                        <div className="flex justify-between items-center text-xs font-bold mb-1">
-                          <span className="text-white">Foco Ativo: {activeExam.title}</span>
-                          <span className="text-indigo-400">Prova: {activeExam.examDate}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">{activeExam.overlapAnalysis}</p>
-                      </div>
-                    </GlassCard>
-                  </div>
-
-                  <div className="lg:col-span-6">
-                    <div className="bg-gradient-to-br from-indigo-600 to-indigo-950 p-6 rounded-[24px] text-white h-full flex flex-col justify-between relative overflow-hidden">
-                      <div className="relative z-10 space-y-2">
-                        <span className="px-2.5 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase tracking-wider">Aconselhamento do Oráculo</span>
-                        <h3 className="text-md font-bold italic pt-2">"O seu edital do {activeExam.title} possui forte sinergia com o seu arsenal."</h3>
-                        <p className="text-xs text-indigo-200 leading-relaxed max-w-sm">
-                          Seu maior ganho imediato de pontos está na banca {activeExam.banca}. Estude e revise os tópicos do edital verticalizado para aumentar sua competitividade!
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => setActiveTab('concursos')}
-                        className="mt-6 self-start bg-white text-indigo-950 font-black px-4 py-2.5 rounded-xl text-xs hover:bg-slate-100 transition-all flex items-center gap-1"
-                      >
-                        Ver Edital Verticalizado <ChevronRight size={14} />
-                      </button>
-                      <Sparkles className="absolute -right-10 -bottom-10 text-white opacity-10" size={160} />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* TAB 2: CENTRAL CONCURSOS (COMPREHENSIVE MULTI-EXAM MANAGEMENT HUB) */}
-            {activeTab === 'concursos' && (
-              <motion.div 
-                key="concursos"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
-              >
-                {/* Header Subfolder Controls */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        {/* CONTAINER DO FLUXO DE ABAS */}
+        <main className="flex-1 p-6 overflow-y-auto max-w-6xl mx-auto w-full">
+          
+          {/* ABA: CENTRAL DE CONCURSOS */}
+          {activeTab === 'concursos' && (
+            <div className="space-y-6 animate-fade-in">
+              
+              {/* COMPONENTE: SCANNER INTELIGENTE COM IA */}
+              <section className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-violet-600/5 rounded-full blur-3xl"></div>
+                
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                   <div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <Layers className="text-indigo-400" />
-                      Central de Concursos & Editais IA
+                    <h2 className="text-md font-extrabold flex items-center gap-2">
+                      <Sparkles className="text-violet-400" size={18} />
+                      Scanner Cognitivo de Editais
                     </h2>
-                    <p className="text-xs text-slate-500">Organize múltiplos concursos, compare similaridade e verticalize matérias</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Carregue o edital em formato PDF para análise real ou utilize presets integrados da inteligência do Gemini.
+                    </p>
                   </div>
 
-                  {/* Quick context switch */}
-                  <div className="flex items-center gap-1.5 bg-slate-900/60 p-1.5 rounded-xl border border-white/5 overflow-x-auto max-w-full">
-                    {examFolders.map(exam => {
-                      const isActive = exam.id === activeExamId;
-                      return (
-                        <button
-                          key={exam.id}
-                          onClick={() => setActiveExamId(exam.id)}
-                          className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
-                            isActive 
-                              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/10' 
-                              : 'text-slate-400 hover:text-white hover:bg-white/5'
-                          }`}
-                        >
-                          {exam.title}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Subfolder Info Panel */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  
-                  {/* Left: IA Scanner Form & Banca Profile Analytics */}
-                  <div className="lg:col-span-5 space-y-6">
-                    
-                    {/* IA Scanner Interface */}
-                    <GlassCard className="p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Wand2 size={16} className="text-indigo-400" />
-                        <h3 className="text-sm font-bold text-white">Adicionar Novo Edital via Oráculo</h3>
-                      </div>
-
-                      <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                        Arraste e solte o arquivo PDF do edital ou cole o conteúdo programático/resumo abaixo. O Oráculo lerá e estruturará toda a sua trilha de forma inteligente.
-                      </p>
-
-                      <div className="space-y-4">
-                        {/* Real Drag & Drop PDF upload area */}
-                        <div className="border-2 border-dashed border-white/10 rounded-xl p-5 flex flex-col items-center justify-center bg-slate-950/40 text-center relative hover:border-indigo-500/50 transition-all">
-                          <Upload size={24} className="text-indigo-400 mb-2" />
-                          <span className="text-xs font-bold text-white">Anexar PDF do Edital</span>
-                          <span className="text-[9px] text-slate-500 mt-1">Extração automática de datas, salários e tópicos</span>
-                          <input 
-                            type="file" 
-                            accept="application/pdf" 
-                            onChange={handlePdfUpload}
-                            className="absolute inset-0 opacity-0 cursor-pointer" 
-                          />
-                        </div>
-
-                        <textarea
-                          value={aiInputText}
-                          onChange={(e) => setAiInputText(e.target.value)}
-                          placeholder="Cole o trecho do edital ou aguarde a extração de texto do PDF aqui..."
-                          className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 h-32 resize-none"
-                        />
-
-                        {/* Presets Row */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase">Preencher Exemplo:</span>
-                          <div className="flex gap-1.5">
-                            <button onClick={() => prefillSamplePreset('sedes')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">SEDES</button>
-                            <button onClick={() => prefillSamplePreset('der')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">DER</button>
-                            <button onClick={() => prefillSamplePreset('cldf')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">CLDF</button>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={handleTriggerAiEditalAnalysis}
-                          disabled={isAiProcessing}
-                          className="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 mt-4"
-                        >
-                          {isAiProcessing ? (
-                            <>
-                              <RefreshCw size={14} className="animate-spin" />
-                              Calculando rotas espectrais de estudo...
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles size={14} />
-                              Processar Edital com Oráculo IA
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {aiNotification && (
-                        <div className="mt-4 p-3 bg-indigo-500/5 rounded-xl border border-indigo-500/10 flex items-start gap-2">
-                          <AlertCircle size={14} className="text-indigo-400 mt-0.5" />
-                          <p className="text-[11px] text-indigo-300 leading-normal">{aiNotification.message}</p>
-                        </div>
-                      )}
-                    </GlassCard>
-
-                    {/* Compare Multi-Concursos Metrics */}
-                    <GlassCard className="p-6">
-                      <div className="flex items-center gap-2 mb-4 text-white">
-                        <FileText size={16} className="text-indigo-400" />
-                        <h3 className="text-sm font-bold">Visão Geral do Edital {activeExam.title}</h3>
-                      </div>
-
-                      <div className="space-y-4 text-xs">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 bg-slate-950/60 rounded-xl border border-white/5">
-                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Banca Reguladora</span>
-                            <span className="text-white font-bold text-sm block mt-0.5">{activeExam.banca}</span>
-                          </div>
-                          <div className="p-3 bg-slate-950/60 rounded-xl border border-white/5">
-                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Data da Prova</span>
-                            <span className="text-amber-400 font-bold text-sm block mt-0.5">{activeExam.examDate}</span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 bg-slate-950/60 rounded-xl border border-white/5">
-                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Salário Inicial</span>
-                            <span className="text-emerald-400 font-bold text-sm block mt-0.5">{activeExam.salary}</span>
-                          </div>
-                          <div className="p-3 bg-slate-950/60 rounded-xl border border-white/5">
-                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Vagas Ofertadas</span>
-                            <span className="text-white font-bold text-sm block mt-0.5">{activeExam.vagas}</span>
-                          </div>
-                        </div>
-
-                        <div className="p-3 bg-slate-950/60 rounded-xl border border-white/5">
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Sistema de Avaliação</span>
-                          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">{activeExam.examSystemDescription}</p>
-                        </div>
-
-                        {/* Banca profile strategy explanation */}
-                        <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-xl">
-                          <span className="text-[9px] text-indigo-400 font-black uppercase tracking-wider block mb-1">Análise da Banca ({activeExam.banca})</span>
-                          <p className="text-[11px] text-slate-400 leading-normal">{activeExam.bancaStyleExplanation}</p>
-                        </div>
-                      </div>
-                    </GlassCard>
-
-                    {/* Adaptive Mentoring based on Study Mode */}
-                    <GlassCard className="p-6">
-                      <div className="flex items-center gap-2 mb-3">
-                        {studyMode === 'iniciante' ? (
-                          <CheckCircle2 size={16} className="text-indigo-400" />
-                        ) : (
-                          <Target size={16} className="text-red-400" />
-                        )}
-                        <h4 className="text-xs font-black text-white uppercase">Plano de Ataque do Mentor</h4>
-                      </div>
-                      {studyMode === 'iniciante' ? (
-                        <p className="text-xs text-slate-400 leading-relaxed">
-                          "Foque primeiro em entender os conceitos básicos. Complete 100% dos checklists em <strong>Compreensão de textos</strong>. Não se apresse com as revisões automáticas de 30 dias até dominar os princípios."
-                        </p>
-                      ) : (
-                        <p className="text-xs text-red-300 leading-relaxed">
-                          "Reta final agressiva! Você possui apenas {activeExam.approvalProbability}% de probabilidade estimada de aprovação. Priorize resolver questões de Direito Constitucional e Direito Administrativo da banca {activeExam.banca} hoje."
-                        </p>
-                      )}
-                    </GlassCard>
-                  </div>
-
-                  {/* Right: Interactive Granular Verticalized Checklist */}
-                  <div className="lg:col-span-7 space-y-6">
-                    <GlassCard className="p-6">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6 border-b border-white/5 pb-4">
-                        <div>
-                          <h3 className="text-md font-bold text-white flex items-center gap-1.5">
-                            <CheckSquare size={18} className="text-emerald-400" />
-                            Edital Verticalizado Inteligente: {activeExam.title}
-                          </h3>
-                          <p className="text-xs text-slate-500">Acompanhe seu progresso real por tópico de matéria</p>
-                        </div>
-                        <div className="text-[10px] text-slate-400 bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 self-start">
-                          Probabilidade de Aprovação Estimada: <span className="text-emerald-400 font-black">{activeExam.approvalProbability}%</span>
-                        </div>
-                      </div>
-
-                      {/* Map of Approval Indicator */}
-                      <div className="mb-6 p-4 bg-slate-950/60 rounded-xl border border-white/5">
-                        <div className="flex justify-between text-xs font-bold text-slate-400 mb-2">
-                          <span>Nível Competitivo do Edital</span>
-                          <span>{activeExam.approvalProbability}% Competitivo</span>
-                        </div>
-                        <ProgressBar progress={activeExam.approvalProbability} color={activeExam.approvalProbability > 70 ? '#10b981' : activeExam.approvalProbability > 40 ? '#6366f1' : '#f59e0b'} />
-                        <span className="text-[10px] text-slate-500 block mt-1">Atingir +75% para entrar na zona crítica de aprovação de vagas.</span>
-                      </div>
-
-                      <div className="space-y-6">
-                        {activeExam.syllabus.map((subj, sIdx) => {
-                          const completedTopics = subj.topics.filter(t => t.completed).length;
-                          const totalTopics = subj.topics.length;
-                          const subjProgress = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
-
-                          return (
-                            <div key={sIdx} className="space-y-3">
-                              <div className="flex justify-between items-center bg-slate-950/40 p-3 rounded-xl border border-white/5">
-                                <span className="text-xs font-black text-white uppercase">{subj.subjectName}</span>
-                                <span className="text-[11px] font-black text-indigo-400">{subjProgress}%</span>
-                              </div>
-
-                              <div className="space-y-2 pl-2">
-                                {subj.topics.map((topic, tIdx) => (
-                                  <div 
-                                    key={tIdx}
-                                    className="p-3 bg-white/5 border border-white/5 hover:border-white/10 rounded-xl flex flex-col gap-3"
-                                  >
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                      <span className="text-xs text-slate-300 font-bold max-w-sm">{topic.topicName}</span>
-                                      
-                                      {/* Interactive study actions */}
-                                      <div className="flex items-center gap-2">
-                                        <button 
-                                          onClick={() => handleToggleSyllabusMetric(activeExam.id, subj.subjectName, topic.topicName, 'completed')}
-                                          className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight transition-all border ${
-                                            topic.completed 
-                                              ? 'bg-indigo-600/20 text-indigo-400 border-indigo-500/30' 
-                                              : 'bg-transparent text-slate-500 border-white/5 hover:border-white/10'
-                                          }`}
-                                        >
-                                          Estudado
-                                        </button>
-                                        <button 
-                                          onClick={() => handleToggleSyllabusMetric(activeExam.id, subj.subjectName, topic.topicName, 'reviewed')}
-                                          className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight transition-all border ${
-                                            topic.reviewed 
-                                              ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30' 
-                                              : 'bg-transparent text-slate-500 border-white/5 hover:border-white/10'
-                                          }`}
-                                        >
-                                          Revisado
-                                        </button>
-                                        <button 
-                                          onClick={() => handleToggleSyllabusMetric(activeExam.id, subj.subjectName, topic.topicName, 'exercisesDone')}
-                                          className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight transition-all border ${
-                                            topic.exercisesDone 
-                                              ? 'bg-amber-600/20 text-amber-400 border-amber-500/30' 
-                                              : 'bg-transparent text-slate-500 border-white/5 hover:border-white/10'
-                                          }`}
-                                        >
-                                          Questões
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    {/* Granular analytics details per topic (Advaced info) */}
-                                    <div className="grid grid-cols-4 gap-2 text-[9px] text-slate-500 border-t border-white/5 pt-2 font-bold uppercase">
-                                      <span>Questões: <strong className="text-white">{topic.questionsCount}</strong></span>
-                                      <span>Acertos: <strong className="text-emerald-400">{topic.correctAnswers}</strong></span>
-                                      <span>Revisões: <strong className="text-indigo-400">{topic.revisionsCount}</strong></span>
-                                      <span className="truncate">Estudado: <strong className="text-white">{topic.lastStudied}</strong></span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </GlassCard>
-                  </div>
-
-                </div>
-              </motion.div>
-            )}
-
-            {/* TAB 3: ANKI COGNITIVE FLASHCARDS WORKSPACE */}
-            {activeTab === 'flashcards' && (
-              <motion.div 
-                key="flashcards"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
-              >
-                {/* Header controls */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                      <GraduationCap className="text-indigo-400" />
-                      Grimório Anki AI: Memorização Espaçada (SRS)
-                    </h2>
-                    <p className="text-xs text-slate-500">Reforce e diagnostique erros de memorização de forma programada.</p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">Filtrar Assunto:</span>
-                    <select
-                      value={bancaFilter}
-                      onChange={(e) => {
-                        setBancaFilter(e.target.value);
-                        setActiveCardIndex(0);
-                        setIsFlipped(false);
-                      }}
-                      className="bg-slate-900 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none"
+                  {/* PRESETS DE IMPORTAÇÃO RÁPIDA */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Atalhos IA:</span>
+                    <button 
+                      onClick={() => handleLoadPresetWithAI('SEDES')}
+                      className="text-[10px] font-bold bg-violet-950/60 hover:bg-violet-900 border border-violet-500/30 text-violet-300 px-2.5 py-1 rounded-lg transition-all"
                     >
-                      <option value="TODOS">Todas as Matérias</option>
-                      <option value="Direito Constitucional">Direito Constitucional</option>
-                      <option value="Direito Administrativo">Direito Administrativo</option>
-                    </select>
+                      SEDES-DF (Quadrix)
+                    </button>
+                    <button 
+                      onClick={() => handleLoadPresetWithAI('PCDF')}
+                      className="text-[10px] font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2.5 py-1 rounded-lg transition-all"
+                    >
+                      PCDF (Cebraspe)
+                    </button>
+                    <button 
+                      onClick={() => handleLoadPresetWithAI('TJDFT')}
+                      className="text-[10px] font-bold bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 px-2.5 py-1 rounded-lg transition-all"
+                    >
+                      TJDFT (FGV)
+                    </button>
                   </div>
                 </div>
 
-                {/* Spaced repetition memory dashboards */}
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5">
-                    <span className="text-[9px] text-slate-500 font-black uppercase tracking-wider">Cartões Revisados</span>
-                    <h3 className="text-lg font-black text-white mt-1">{filteredCards.length} / {flashcards.length}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* DROPZONE DE ARQUIVO */}
+                  <div className="border-2 border-dashed border-slate-800 hover:border-violet-500/50 bg-slate-950/40 rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer relative transition-all group">
+                    <input 
+                      type="file" 
+                      accept="application/pdf"
+                      onChange={handlePdfUpload}
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                    />
+                    <Upload className="text-slate-500 group-hover:text-violet-400 transition-colors mb-2" size={28} />
+                    <h3 className="text-xs font-bold text-slate-300">Escolher ou Arrastar arquivo PDF</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">Até 30 páginas processadas e verticalizadas automaticamente pela IA</p>
                   </div>
-                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5">
-                    <span className="text-[9px] text-slate-500 font-black uppercase tracking-wider">Retenção Ativa Média</span>
-                    <h3 className="text-lg font-black text-emerald-400 mt-1">87%</h3>
-                  </div>
-                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5">
-                    <span className="text-[9px] text-slate-500 font-black uppercase tracking-wider">Revisões Atrasadas</span>
-                    <h3 className="text-lg font-black text-rose-400 mt-1">0</h3>
-                  </div>
-                  <div className="p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
-                    <span className="text-[9px] text-indigo-400 font-black uppercase tracking-wider">Ajuste de Memorização</span>
-                    <h3 className="text-lg font-black text-indigo-300 mt-1">Manual / Gemini</h3>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  {/* Left: Input upload and creator tool */}
-                  <div className="lg:col-span-5 space-y-6">
-                    <GlassCard className="p-6">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Cpu size={16} className="text-indigo-400" />
-                        <h3 className="text-sm font-bold text-white">Criador Adaptativo de Cartões</h3>
-                      </div>
-                      <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                        Cole resumos, leis, regimentos ou apostilas inteiras. O sistema transformará o material em cartões inteligentes de memorização.
-                      </p>
-
-                      <div className="space-y-4">
-                        <textarea
-                          value={ankiInputText}
-                          onChange={(e) => setAnkiInputText(e.target.value)}
-                          placeholder="Exemplo: CF Art. 5º, inciso IX - é livre a expressão da atividade intelectual, artística, científica..."
-                          className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 h-32 resize-none"
-                        />
-
-                        <div className="flex justify-between items-center gap-4">
-                          <div>
-                            <label className="text-[9px] text-slate-500 font-black uppercase tracking-wider block mb-1">Banca Estilo</label>
-                            <select
-                              value={selectedBanca}
-                              onChange={(e) => setSelectedBanca(e.target.value)}
-                              className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-300"
-                            >
-                              <option value="IADES">IADES (Literal)</option>
-                              <option value="CEBRASPE">CEBRASPE (C/E)</option>
-                              <option value="FGV">FGV (Caso Prático)</option>
-                            </select>
-                          </div>
-
-                          <button
-                            onClick={handleGenerateAnkiCards}
-                            disabled={isAnkiGenerating}
-                            className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 mt-4"
-                          >
-                            {isAnkiGenerating ? (
-                              <>
-                                <RefreshCw size={12} className="animate-spin" />
-                                Modelando Memória...
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles size={12} />
-                                Invocar Flashcards com IA
-                              </>
-                            )}
-                          </button>
+                  {/* MONITOR E ENVIADOR DE TEXTO */}
+                  <div className="bg-slate-950/60 border border-slate-900 rounded-xl p-3.5 flex flex-col justify-between h-[140px]">
+                    {isProcessing ? (
+                      <div className="space-y-3 my-auto">
+                        <div className="flex justify-between items-center text-[10px] text-violet-400 font-bold animate-pulse">
+                          <span>{processingStatus}</span>
+                          <span>{processingProgress}%</span>
                         </div>
-                      </div>
-                    </GlassCard>
-
-                    {/* AI Memory Tracker diagnosis feedback */}
-                    <GlassCard className="p-6 bg-gradient-to-br from-indigo-500/5 to-transparent border border-indigo-500/10">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Lightbulb size={16} className="text-amber-400 animate-bounce" />
-                        <h4 className="text-xs font-black text-white uppercase">IA Analista de Memorização</h4>
-                      </div>
-                      <p className="text-xs text-slate-400 leading-relaxed mb-3">
-                        "Detectamos cansaço ou queda de retenção em Direito Administrativo. Seus flashcards serão apresentados de forma simplificada por 24h para reter a base legal sólida."
-                      </p>
-                      <div className="p-2.5 bg-slate-950/60 rounded-xl border border-white/5 flex items-center justify-between text-[10px] font-bold text-amber-500">
-                        <span>Frequência de Revisão</span>
-                        <span>Adaptada +12%</span>
-                      </div>
-                    </GlassCard>
-                  </div>
-
-                  {/* Right: Active Card Reviewer */}
-                  <div className="lg:col-span-7">
-                    {filteredCards.length === 0 ? (
-                      <div className="p-12 text-center bg-slate-900/20 border border-dashed border-white/5 rounded-3xl">
-                        <Cpu className="mx-auto text-indigo-400 mb-4 animate-pulse" size={32} />
-                        <h3 className="text-sm font-bold text-white">Nenhum cartão para este assunto</h3>
-                        <p className="text-xs text-slate-500 mt-2">Use o formulário esquerdo para colar leis secas e criar.</p>
+                        <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+                          <div 
+                            className="bg-gradient-to-r from-violet-500 to-indigo-500 h-full rounded-full transition-all duration-350"
+                            style={{ width: `${processingProgress}%` }}
+                          ></div>
+                        </div>
                       </div>
                     ) : (
-                      <div className="space-y-6">
-                        
-                        {/* Interactive flippable card */}
-                        <div 
-                          onClick={() => {
-                            if (!isFlipped) setIsFlipped(true);
-                          }}
-                          className={`min-h-[280px] bg-slate-950/80 border-2 rounded-[32px] p-8 flex flex-col justify-between relative cursor-pointer overflow-hidden transition-all duration-300 ${
-                            isFlipped ? 'border-indigo-500 shadow-lg shadow-indigo-500/5' : 'border-white/5 hover:border-white/10'
-                          }`}
+                      <div className="flex flex-col h-full justify-between">
+                        <textarea 
+                          className="w-full h-full bg-transparent resize-none text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none"
+                          placeholder="Cole o texto de regulamentos ou ementas específicas para mapear individualmente..."
+                          value={pdfText}
+                          onChange={(e) => setPdfText(e.target.value)}
+                        />
+                        <button 
+                          onClick={() => pdfText && processEditalWithGemini(pdfText)}
+                          disabled={!pdfText}
+                          className={`w-full py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${pdfText ? 'bg-violet-600 hover:bg-violet-500 text-white' : 'bg-slate-900 text-slate-600 cursor-not-allowed'}`}
                         >
-                          {/* Card metadata */}
-                          <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold uppercase mb-4">
-                            <span className="flex items-center gap-1">
-                              <Bookmark size={10} className="text-indigo-400" />
-                              {activeCard.subject}
-                            </span>
-                            <span className="bg-white/5 px-2 py-0.5 rounded text-indigo-300 font-black">
-                              TIPO: {activeCard.type.toUpperCase()} {activeCard.banca && `• ${activeCard.banca}`}
-                            </span>
-                          </div>
-
-                          {/* Front vs Back display */}
-                          <div className="my-auto text-center">
-                            <AnimatePresence mode="wait">
-                              {!isFlipped ? (
-                                <motion.div
-                                  key="front"
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  exit={{ opacity: 0 }}
-                                  className="space-y-4"
-                                >
-                                  {activeCard.type === 'cloze' ? (
-                                    <p 
-                                      className="text-base sm:text-lg text-white font-medium leading-relaxed"
-                                      dangerouslySetInnerHTML={{ __html: renderClozeText(activeCard.front, clozeRevealed) }}
-                                      onClick={(e) => {
-                                        const target = e.target as HTMLElement;
-                                        if (target.tagName === 'SPAN') {
-                                          e.stopPropagation();
-                                          setClozeRevealed(true);
-                                          setIsFlipped(true);
-                                        }
-                                      }}
-                                    />
-                                  ) : (
-                                    <p className="text-base sm:text-lg text-white font-medium leading-relaxed">
-                                      {activeCard.front}
-                                    </p>
-                                  )}
-                                  
-                                  <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-6 animate-pulse">
-                                    Clique no cartão para virar e ver gabarito
-                                  </p>
-                                </motion.div>
-                              ) : (
-                                <motion.div
-                                  key="back"
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  exit={{ opacity: 0 }}
-                                  className="space-y-4 text-left"
-                                >
-                                  <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
-                                    <span className="text-[9px] text-indigo-400 font-black uppercase tracking-wider block mb-2">Resposta Consolidada</span>
-                                    <p className="text-sm sm:text-base text-slate-100 leading-relaxed font-semibold">
-                                      {activeCard.back}
-                                    </p>
-                                  </div>
-
-                                  {activeCard.explanation && (
-                                    <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex items-start gap-3">
-                                      <Lightbulb size={16} className="text-amber-400 mt-0.5 shrink-0" />
-                                      <div>
-                                        <span className="text-[9px] text-amber-500 font-black uppercase tracking-wider block mb-0.5">Associações Mentais & Explicações</span>
-                                        <p className="text-xs text-slate-400 leading-normal">
-                                          {activeCard.explanation}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-
-                          {/* Interval rating status */}
-                          <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold mt-4 pt-4 border-t border-white/5">
-                            <span>Repetições: {activeCard.repetitions}</span>
-                            <span>Intervalo: {activeCard.intervalDays} dias</span>
-                            <span>Facilidade: {activeCard.easeFactor}x</span>
-                          </div>
-                        </div>
-
-                        {/* Adaptive SM2 SRS scoring triggers */}
-                        {isFlipped && (
-                          <div className="grid grid-cols-4 gap-3">
-                            <button
-                              onClick={() => handleRateAnkiCard(1)}
-                              className="p-3 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 hover:border-red-500 text-red-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
-                            >
-                              <span className="font-black text-xs uppercase">Errei</span>
-                              <span className="text-[9px] text-red-500/80 font-bold block">Revisão (1 dia)</span>
-                            </button>
-                            <button
-                              onClick={() => handleRateAnkiCard(2)}
-                              className="p-3 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 hover:border-amber-500 text-amber-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
-                            >
-                              <span className="font-black text-xs uppercase">Difícil</span>
-                              <span className="text-[9px] text-amber-500/80 font-bold block">Revisão (2 dias)</span>
-                            </button>
-                            <button
-                              onClick={() => handleRateAnkiCard(3)}
-                              className="p-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 hover:border-indigo-500 text-indigo-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
-                            >
-                              <span className="font-black text-xs uppercase">Bom</span>
-                              <span className="text-[9px] text-indigo-500/80 font-bold block">Revisão (4 dias)</span>
-                            </button>
-                            <button
-                              onClick={() => handleRateAnkiCard(4)}
-                              className="p-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 hover:border-emerald-500 text-emerald-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
-                            >
-                              <span className="font-black text-xs uppercase">Fácil</span>
-                              <span className="text-[9px] text-emerald-500/80 font-bold block">Revisão (8 dias)</span>
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Deck carousel controller */}
-                        <div className="flex justify-between items-center text-xs text-slate-500 px-2 font-bold">
-                          <span>Cartão {activeCardIndex + 1} de {filteredCards.length}</span>
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={() => {
-                                setIsFlipped(false);
-                                setClozeRevealed(false);
-                                setActiveCardIndex(p => Math.max(0, p - 1));
-                              }}
-                              className="px-2.5 py-1 bg-white/5 border border-white/5 rounded-lg text-slate-400 hover:text-white"
-                            >
-                              Anterior
-                            </button>
-                            <button 
-                              onClick={() => {
-                                setIsFlipped(false);
-                                setClozeRevealed(false);
-                                setActiveCardIndex(p => Math.min(filteredCards.length - 1, p + 1));
-                              }}
-                              className="px-2.5 py-1 bg-white/5 border border-white/5 rounded-lg text-slate-400 hover:text-white"
-                            >
-                              Próximo
-                            </button>
-                          </div>
-                        </div>
-
+                          <Brain size={12} />
+                          Mapear Texto com Oráculo
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
-              </motion.div>
-            )}
+              </section>
 
-            {/* TAB 4: SUBJECTS MATERIAS MANAGER */}
-            {activeTab === 'subjects' && (
-              <motion.div 
-                key="subjects"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Grimório de Conhecimentos</h2>
-                    <p className="text-xs text-slate-500">Monitore as disciplinas do seu concurso de forma modular</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                  {/* Performance Log input */}
-                  <GlassCard className="lg:col-span-4 p-6">
-                    <h3 className="text-sm font-bold text-white mb-6 flex items-center gap-1.5">
-                      <Plus size={16} className="text-indigo-400" /> Registrar Prática de Questões
-                    </h3>
-                    <form 
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const data = new FormData(e.currentTarget);
-                        const subId = data.get('subject') as string;
-                        const total = parseInt(data.get('total') as string) || 0;
-                        const correct = parseInt(data.get('correct') as string) || 0;
-                        handleAddQuestionLog(subId, total, correct);
-                        e.currentTarget.reset();
-                      }}
-                      className="space-y-4"
-                    >
-                      <div>
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Selecione a Matéria</label>
-                        <select 
-                          name="subject" 
-                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+              {/* COMPONENTE: INFORMAÇÕES DETALHADAS DO EDITAL ATIVO */}
+              {activeConcurso && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* CARD DE INFORMAÇÕES E PROVAS DISCURSIVAS */}
+                  <div className="space-y-6 lg:col-span-1">
+                    
+                    {/* INFOS BÁSICAS DO EDITAL */}
+                    <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider">Ficha Informativa</h3>
+                        <button 
+                          onClick={() => handleRemoveConcurso(activeConcurso.id)}
+                          className="text-slate-500 hover:text-rose-400 p-1 rounded-md hover:bg-rose-950/20"
                         >
-                          {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Questões Totais</label>
-                          <input 
-                            name="total" 
-                            type="number" 
-                            placeholder="0" 
-                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" 
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Acertos</label>
-                          <input 
-                            name="correct" 
-                            type="number" 
-                            placeholder="0" 
-                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" 
-                          />
-                        </div>
-                      </div>
-                      <button 
-                        type="submit" 
-                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg"
-                      >
-                        Registrar no Diário
-                      </button>
-                    </form>
-                  </GlassCard>
 
-                  {/* Subjects list */}
-                  <div className="lg:col-span-8 space-y-4">
-                    {subjects.map(sub => (
-                      <GlassCard key={sub.id} className="p-6">
-                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
+                      <div className="space-y-3 text-xs">
+                        <div>
+                          <div className="text-[9px] text-slate-500 uppercase">Órgão e Certame</div>
+                          <div className="font-bold text-slate-200">{activeConcurso.nomeConcurso}</div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold text-[9px] rounded-full uppercase tracking-wider">
-                              Maestria: {sub.mastery}
-                            </span>
-                            <h4 className="text-md font-bold text-white mt-1.5">{sub.name}</h4>
+                            <div className="text-[9px] text-slate-500 uppercase">Banca</div>
+                            <div className="font-bold text-slate-300">{activeConcurso.banca}</div>
                           </div>
-                          <div className="text-left sm:text-right">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Taxa de Acertos</p>
-                            <p className="text-base font-bold text-emerald-400">{sub.accuracy}% de Precisão</p>
+                          <div>
+                            <div className="text-[9px] text-slate-500 uppercase">Vencimento</div>
+                            <div className="font-bold text-emerald-400">{activeConcurso.salario}</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-slate-500 uppercase">Regime Vagas</div>
+                            <div className="font-bold text-slate-300">{activeConcurso.vagas}</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-slate-500 uppercase">Inscrição</div>
+                            <div className="font-bold text-slate-300">{activeConcurso.valorInscricao}</div>
                           </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-[10px] text-slate-500 font-bold uppercase">
-                            <span>Progresso Geral do Edital</span>
-                            <span>{sub.progress}%</span>
-                          </div>
-                          <ProgressBar progress={sub.progress} color={sub.color} />
-                        </div>
-                      </GlassCard>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
 
-            {/* TAB 5: ARTIFICIAL INTELLIGENCE LAB */}
-            {activeTab === 'lab' && (
-              <motion.div 
-                key="lab"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="grid grid-cols-1 lg:grid-cols-12 gap-8"
-              >
-                {/* Radar chart visualization */}
-                <GlassCard className="lg:col-span-6 p-8">
-                  <h3 className="text-sm font-bold text-white mb-6 flex items-center gap-2">
-                    <BrainCircuit size={18} className="text-indigo-400" /> Distribuição de Poder de Combate
-                  </h3>
-                  <div className="h-[280px] w-full flex items-center justify-center">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
-                        <PolarGrid stroke="#334155" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 10 }} />
-                        <Radar
-                          name="Precisão %"
-                          dataKey="A"
-                          stroke="#6366f1"
-                          fill="#6366f1"
-                          fillOpacity={0.4}
-                        />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </GlassCard>
-
-                {/* AI Diagnoses & suggestions */}
-                <div className="lg:col-span-6 space-y-6">
-                  <GlassCard className="p-6">
-                    <h3 className="text-sm font-bold text-white mb-4">Pontos de Fuga Identificados</h3>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-rose-500/5 border border-rose-500/10 rounded-xl flex items-start gap-3">
-                        <div className="w-2 h-2 rounded-full bg-rose-500 mt-1.5" />
                         <div>
-                          <p className="text-xs font-bold text-white">Domínio Crítico: Lógica Proposicional</p>
-                          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">Sua taxa de acertos caiu de 68% para 55%. Recomendamos revisão baseada em mapas mentais procedurais.</p>
-                        </div>
-                      </div>
-                      <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl flex items-start gap-3">
-                        <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5" />
-                        <div>
-                          <p className="text-xs font-bold text-white">Atenção em Consistência: Constitucional</p>
-                          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">Faz 3 dias que você não resolve sessões sobre "Direitos Fundamentais". Evite decaimento de memória espacial.</p>
+                          <div className="text-[9px] text-slate-500 uppercase">Requisitos Exigidos</div>
+                          <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{activeConcurso.requisitos}</p>
                         </div>
                       </div>
                     </div>
-                  </GlassCard>
 
-                  <GlassCard className="p-6 bg-gradient-to-tr from-indigo-500/5 to-transparent">
-                    <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-1">
-                      <Sparkles size={16} className="text-indigo-400" /> Sugestão de Feitiço de Estudos
-                    </h3>
-                    <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                      Ative o Modo Foco Arcano de 25 minutos e foque na revisão do caderno de erros de Informática. Isso garantirá mais velocidade na sua jornada evolutiva.
-                    </p>
-                    <button 
-                      onClick={() => setActiveTab('timer')}
-                      className="px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/30 text-indigo-400 rounded-xl text-xs font-bold transition-all"
-                    >
-                      Canalizar Recomendação
-                    </button>
-                  </GlassCard>
-                </div>
-              </motion.div>
-            )}
+                    {/* REDAÇÃO E PROVA DISCURSIVA */}
+                    {activeConcurso.redacaoInfo?.possuiRedacao && (
+                      <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-5 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <FileText className="text-fuchsia-400" size={16} />
+                          <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider">Análise de Redacção</h3>
+                        </div>
 
-            {/* TAB 6: POMODORO TIMER WORKSPACE */}
-            {activeTab === 'timer' && (
-              <motion.div 
-                key="timer"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="max-w-xl mx-auto py-8"
-              >
-                <FocusTimer onComplete={(xp, stat) => handleGainXpAndStats(xp, stat)} />
-              </motion.div>
-            )}
-
-            {/* TAB 7: CHRONICLES HISTORY LOG */}
-            {activeTab === 'chronicles' && (
-              <motion.div 
-                key="chronicles"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-8"
-              >
-                <div>
-                  <h2 className="text-xl font-bold text-white">Crônicas de Batalhas</h2>
-                  <p className="text-xs text-slate-500">Log completo de sessões de foco e resoluções passadas</p>
-                </div>
-
-                <GlassCard className="p-6">
-                  <div className="space-y-4">
-                    {logs.map((log) => (
-                      <div key={log.id} className="p-4 bg-white/5 border border-white/5 hover:border-indigo-500/20 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20">
-                            <Target size={18} />
+                        <div className="bg-slate-950 p-3 rounded-lg border border-slate-900 text-[11px] space-y-2">
+                          <div>
+                            <span className="text-slate-500">Formato:</span> <span className="font-bold text-slate-300">{activeConcurso.redacaoInfo.estruturaExigida}</span>
                           </div>
                           <div>
-                            <h4 className="text-xs font-bold text-white">{log.subject}</h4>
-                            <p className="text-[10px] text-slate-500 mt-1">{log.timestamp} • Prática Realizada</p>
+                            <span className="text-slate-500">Critério de Avaliação:</span>
+                            <p className="text-slate-400 leading-relaxed mt-0.5">{activeConcurso.redacaoInfo.criterios}</p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-6">
-                          <div className="text-left sm:text-right">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Desempenho</p>
-                            <p className="text-xs font-black text-emerald-400">{log.correct} acertos de {log.total} questões</p>
+                        {/* TEMAS PROVÁVEIS MAIS RELEVANTES */}
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Temas Prováveis de Cobrança:</span>
+                          <ul className="space-y-1">
+                            {activeConcurso.redacaoInfo.temasProvaveis?.map((t, idx) => (
+                              <li key={idx} className="text-xs bg-violet-950/20 border border-violet-900/30 text-violet-300 px-2.5 py-1.5 rounded-lg leading-relaxed">
+                                {t}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* REGISTRO DE SIMULADO DE REDAÇÃO */}
+                        <div className="pt-3 border-t border-slate-900/80 space-y-2">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Novo Registro de Redacção:</span>
+                          <input 
+                            type="text" 
+                            placeholder="Tema redigido..."
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1 px-2.5 text-[11px] text-slate-250 focus:outline-none focus:border-violet-500"
+                            value={newTema}
+                            onChange={(e) => setNewTema(e.target.value)}
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <input 
+                              type="number" 
+                              step="0.1"
+                              placeholder="Nota obtida"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1 px-2.5 text-[11px] text-slate-250 focus:outline-none focus:border-violet-500"
+                              value={newNota || ''}
+                              onChange={(e) => setNewNota(Number(e.target.value))}
+                            />
+                            <button 
+                              onClick={handleSaveTreinoRedacao}
+                              className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-1 rounded-lg text-xs transition-all"
+                            >
+                              Anunciar Treino
+                            </button>
                           </div>
-                          <div className="text-left sm:text-right">
-                            <p className="text-[10px] text-indigo-400 font-black tracking-widest uppercase">+{log.xpGained} XP</p>
+                          <textarea 
+                            placeholder="Anotações ou feedback de correcção..."
+                            className="w-full h-12 bg-slate-950 border border-slate-800 rounded-lg p-2 text-[10px] text-slate-300 focus:outline-none focus:border-violet-500 resize-none"
+                            value={newFeedback}
+                            onChange={(e) => setNewFeedback(e.target.value)}
+                          />
+                        </div>
+
+                        {/* HISTÓRICO DE TREINOS */}
+                        {activeConcurso.redacaoInfo.treinos?.length > 0 && (
+                          <div className="space-y-1.5 max-h-[120px] overflow-y-auto">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Treinos Praticados:</span>
+                            {activeConcurso.redacaoInfo.treinos.map(tr => (
+                              <div key={tr.id} className="bg-slate-950 border border-slate-900 rounded-lg p-2 flex justify-between items-center text-[10px]">
+                                <div className="space-y-0.5">
+                                  <div className="font-bold text-slate-200 truncate max-w-[150px]">{tr.tema}</div>
+                                  <div className="text-[9px] text-slate-500">{tr.data} - {tr.feedback}</div>
+                                </div>
+                                <span className="text-[10px] font-black text-emerald-400 bg-emerald-950/40 border border-emerald-900 px-2 py-0.5 rounded">
+                                  {tr.nota} pts
+                                </span>
+                              </div>
+                            ))}
                           </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* DATAS E CRONOGRAMA REVERSIVO */}
+                    <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-5 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="text-violet-400" size={16} />
+                        <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider">Cronograma de Prazos</h3>
+                      </div>
+
+                      <div className="space-y-2">
+                        {activeConcurso.datasImportantes?.map(dt => (
+                          <div key={dt.id} className="flex justify-between items-center bg-slate-950 border border-slate-900 p-2.5 rounded-lg">
+                            <div className="text-xs">
+                              <div className="font-bold text-slate-200">{dt.evento}</div>
+                              <div className="text-[10px] text-slate-500 mt-0.5">{dt.data}</div>
+                            </div>
+                            <span className="text-[10px] font-extrabold text-violet-400 bg-violet-950 border border-violet-900 px-2.5 py-1 rounded-md">
+                              {getDaysLeft(dt.data)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* EDITAL VERTICALIZADO DINÂMICO */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 backdrop-blur-sm">
+                      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+                        <div>
+                          <h3 className="font-black text-md text-slate-200">Plano Verticalizado Dinâmico</h3>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Marque a conclusão das tarefas ou use a IA do Grimório para obter resumos profundos de cada matéria.</p>
+                        </div>
+                        <div className="bg-slate-950 border border-slate-800 px-3 py-1 rounded-full text-xs font-black text-violet-300">
+                          {getOverallProgress(activeConcurso)}% Coberto
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </GlassCard>
-              </motion.div>
-            )}
 
-          </AnimatePresence>
+                      <div className="space-y-3">
+                        {activeConcurso.materias?.map(materia => {
+                          const isExpanded = expandedSubject === materia.id;
+                          return (
+                            <div key={materia.id} className="bg-slate-950 border border-slate-900 rounded-xl overflow-hidden">
+                              
+                              {/* TRIGGER DO ACCORDION DE MATÉRIA */}
+                              <button 
+                                onClick={() => setExpandedSubject(isExpanded ? null : materia.id)}
+                                className="w-full flex justify-between items-center px-4 py-3.5 bg-slate-900/10 hover:bg-slate-900/30 text-left transition-all"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <div className="h-2 w-2 rounded-full bg-violet-500 animate-pulse"></div>
+                                  <span className="font-bold text-xs text-slate-300">{materia.nomeMateria}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-500 font-semibold">{materia.topicos.length} Tópicos</span>
+                                  {isExpanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
+                                </div>
+                              </button>
+
+                              {/* TÓPICOS VERTICALIZADOS DA MATÉRIA */}
+                              {isExpanded && (
+                                <div className="p-3 border-t border-slate-900 divide-y divide-slate-900/60">
+                                  {materia.topicos.map(topico => (
+                                    <div key={topico.id} className="py-3 px-1.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                      
+                                      {/* Título e Badges de Prioridade */}
+                                      <div className="space-y-1.5 flex-1">
+                                        <span className="text-xs font-semibold text-slate-300 leading-relaxed block">{topico.nome}</span>
+                                        <div className="flex flex-wrap gap-2 items-center">
+                                          <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                            topico.prioridade === 'Alta' ? 'bg-rose-950/60 text-rose-400 border border-rose-900/50' :
+                                            topico.prioridade === 'Média' ? 'bg-amber-950/60 text-amber-400 border border-amber-900/50' :
+                                            'bg-emerald-950/60 text-emerald-400 border border-emerald-900/50'
+                                          }`}>
+                                            Prioridade {topico.prioridade}
+                                          </span>
+                                          <span className="text-[9px] text-slate-500">Cobrança: {topico.frequencia}</span>
+                                          {topico.tempoEstudado > 0 && (
+                                            <span className="text-[9px] text-violet-400 font-semibold flex items-center gap-1">
+                                              <Clock size={10} /> {topico.tempoEstudado} min
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* BOTÕES DE PROGRESSO DO ALUNO */}
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <button 
+                                          onClick={() => toggleTopicMark(materia.id, topico.id, 'estudado')}
+                                          className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${topico.estudado ? 'bg-violet-950 border-violet-500 text-violet-300' : 'bg-slate-950 border-slate-850 text-slate-500 hover:text-slate-300'}`}
+                                        >
+                                          ESTUDADO
+                                        </button>
+                                        <button 
+                                          onClick={() => toggleTopicMark(materia.id, topico.id, 'revisado')}
+                                          className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${topico.revisado ? 'bg-indigo-950 border-indigo-500 text-indigo-300' : 'bg-slate-950 border-slate-850 text-slate-500 hover:text-slate-300'}`}
+                                        >
+                                          REVISADO
+                                        </button>
+                                        <button 
+                                          onClick={() => toggleTopicMark(materia.id, topico.id, 'exercicios')}
+                                          className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${topico.exercicios ? 'bg-fuchsia-950 border-fuchsia-500 text-fuchsia-300' : 'bg-slate-950 border-slate-850 text-slate-500 hover:text-slate-300'}`}
+                                        >
+                                          EXERCÍCIOS
+                                        </button>
+
+                                        {/* INFORMAÇÕES ADICIONAIS */}
+                                        <button 
+                                          onClick={() => {
+                                            setSelectedTopic(topico);
+                                            setNoteText(topico.notas || '');
+                                          }}
+                                          className="p-1.5 rounded-lg hover:bg-slate-900 border border-transparent hover:border-slate-800 text-slate-400 hover:text-slate-200 transition-all"
+                                        >
+                                          <Info size={14} />
+                                        </button>
+
+                                        {/* GERAR ANKI AUTOMÁTICO DO TÓPICO COM O GEMINI */}
+                                        <button 
+                                          onClick={() => generateAnkiForTopic(topico.nome, materia.nomeMateria)}
+                                          disabled={generatingCards}
+                                          title="Gerar 4 Flashcards com IA"
+                                          className="p-1.5 bg-violet-950/40 border border-violet-900/50 hover:bg-violet-900/60 rounded-lg text-violet-300 transition-all disabled:opacity-40"
+                                        >
+                                          <Brain size={12} className={generatingCards ? 'animate-spin' : ''} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ABA: PAINEL DE DESEMPENHO E ESTATÍSTICAS */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6 animate-fade-in">
+              
+              {/* CARTÕES DE STATUS DA CENTRAL */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-900/30 border border-slate-900 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Aproveitamento Geral</span>
+                    <div className="text-xl font-black text-violet-400 mt-1">{getOverallAccuracy(activeConcurso)}%</div>
+                    <span className="text-[10px] text-slate-500 mt-1 block">Acertos consolidados</span>
+                  </div>
+                  <div className="p-2.5 bg-violet-950/50 rounded-xl border border-violet-800/30 text-violet-300">
+                    <Target size={20} />
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/30 border border-slate-900 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Tempo Acumulado</span>
+                    <div className="text-xl font-black text-emerald-400 mt-1">{getHoursStudied(activeConcurso)}h</div>
+                    <span className="text-[10px] text-slate-500 mt-1 block">Soma total de foco</span>
+                  </div>
+                  <div className="p-2.5 bg-emerald-950/50 rounded-xl border border-emerald-800/30 text-emerald-300">
+                    <Clock size={20} />
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/30 border border-slate-900 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Editais Salvos</span>
+                    <div className="text-xl font-black text-slate-100 mt-1">{concursos.length}</div>
+                    <span className="text-[10px] text-slate-500 mt-1 block">Gravados no LocalStorage</span>
+                  </div>
+                  <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-900 text-slate-400">
+                    <Database size={20} />
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/30 border border-slate-900 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase font-extrabold tracking-wider">Patamar Mágico</span>
+                    <div className="text-xl font-black text-amber-500 mt-1">Lvl {level}</div>
+                    <span className="text-[10px] text-slate-500 mt-1 block">{exp}% de progresso</span>
+                  </div>
+                  <div className="p-2.5 bg-amber-950/50 rounded-xl border border-amber-800/30 text-amber-400">
+                    <Award size={20} />
+                  </div>
+                </div>
+              </div>
+
+              {/* GRÁFICOS INTERACTIVOS (RECHARTS) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* GRÁFICO DE COBERTURA (RADAR) */}
+                <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-5 lg:col-span-1">
+                  <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-4">Matérias Dominadas</h3>
+                  <div className="h-[240px] flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" r="80%" data={getRadarMetrics()}>
+                        <PolarGrid stroke="#1e293b" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 9 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 8 }} />
+                        <Radar name="Aproveitamento" dataKey="Aproveitamento" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.25} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* GRÁFICO DE DESEMPENHO DIÁRIO (AREA) */}
+                <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-5 lg:col-span-2">
+                  <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-4">Estatísticas Semanais de Estudo</h3>
+                  <div className="h-[240px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={[
+                          { name: 'Seg', Minutos: 90 },
+                          { name: 'Ter', Minutos: 150 },
+                          { name: 'Qua', Minutos: 120 },
+                          { name: 'Qui', Minutos: 190 },
+                          { name: 'Sex', Minutos: 140 },
+                          { name: 'Sáb', Minutos: 220 },
+                          { name: 'Dom', Minutos: 100 }
+                        ]}
+                        margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id="colorMin" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4}/>
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={10} />
+                        <YAxis stroke="#64748b" fontSize={10} />
+                        <Tooltip contentStyle={{ backgroundColor: '#020617', borderColor: '#1e293b', color: '#cbd5e1', fontSize: '11px' }} />
+                        <Area type="monotone" dataKey="Minutos" stroke="#8b5cf6" fillOpacity={1} fill="url(#colorMin)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              {/* SIMETRIA E REAPROVEITAMENTO (OVERLAP) */}
+              <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6">
+                <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-1">Mapeador de Sobreposição de Conteúdo</h3>
+                <p className="text-[10px] text-slate-500 mb-4">Calcule matematicamente quais matérias básicas e específicas você pode reaproveitar entre concursos públicos.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {concursos.map(c => (
+                    <div key={c.id} className="bg-slate-950 border border-slate-900 p-4 rounded-xl flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-bold text-slate-200">{c.nomeConcurso}</div>
+                        <div className="text-[9px] text-slate-500 mt-0.5">{c.banca} - {c.cargo}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-md font-black text-violet-400">{getOverlapPercentage(activeConcurso, c)}%</div>
+                        <span className="text-[8px] text-slate-500 font-bold uppercase">Simetria</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ABA: GRIMÓRIO ANKI */}
+          {activeTab === 'anki' && (
+            <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
+              <div className="bg-slate-900/30 border border-slate-900 p-6 rounded-2xl text-center relative overflow-hidden">
+                <div className="absolute -top-8 -left-8 w-32 h-32 bg-violet-600/5 rounded-full blur-2xl"></div>
+                <h2 className="text-sm font-black flex items-center justify-center gap-2">
+                  <Brain className="text-violet-400" size={18} />
+                  Revisão Ativa e Repetição Espaçada
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-1">Estimule a memorização de longo prazo avaliando conceitos-chave extraídos por IA.</p>
+              </div>
+
+              {flashcards.length > 0 ? (
+                <div className="space-y-4">
+                  {/* CARTÃO SELECIONADO */}
+                  <div 
+                    onClick={() => setShowCardBack(!showCardBack)}
+                    className="min-h-[200px] bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 hover:border-violet-500/40 rounded-2xl p-6 flex flex-col justify-between cursor-pointer transition-all shadow-lg text-center"
+                  >
+                    <span className="text-[8px] font-extrabold text-violet-400 uppercase tracking-widest bg-violet-950/60 border border-violet-900/40 px-2 py-0.5 rounded self-center">
+                      Assunto: {flashcards[currentCardIndex]?.subject}
+                    </span>
+
+                    <div className="my-auto px-2">
+                      {showCardBack ? (
+                        <p className="text-xs font-semibold text-slate-300 leading-relaxed">
+                          {flashcards[currentCardIndex]?.back}
+                        </p>
+                      ) : (
+                        <h3 className="text-sm font-extrabold text-slate-100 leading-relaxed">
+                          {flashcards[currentCardIndex]?.front}
+                        </h3>
+                      )}
+                    </div>
+
+                    <span className="text-[9px] text-slate-500">
+                      {showCardBack ? "Clique para reverter à pergunta" : "Clique em qualquer lugar para ler a resposta"}
+                    </span>
+                  </div>
+
+                  {/* CONTROLES DE REVISÃO */}
+                  <div className="flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-900 gap-3">
+                    <button 
+                      onClick={() => {
+                        setShowCardBack(false);
+                        setCurrentCardIndex((prev) => (prev > 0 ? prev - 1 : flashcards.length - 1));
+                      }}
+                      className="text-[10px] font-bold text-slate-500 hover:text-slate-300"
+                    >
+                      Anterior
+                    </button>
+
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {
+                          addExp(10);
+                          setShowCardBack(false);
+                          setCurrentCardIndex((prev) => (prev < flashcards.length - 1 ? prev + 1 : 0));
+                          setSuccessMessage("Prioridade de revisão elevada para este conceito.");
+                        }}
+                        className="bg-rose-950/40 border border-rose-900/50 text-rose-400 font-extrabold px-3 py-1.5 rounded-lg text-xs transition-all hover:bg-rose-900/40"
+                      >
+                        Errei / Difícil
+                      </button>
+                      <button 
+                        onClick={() => {
+                          addExp(20);
+                          setShowCardBack(false);
+                          setCurrentCardIndex((prev) => (prev < flashcards.length - 1 ? prev + 1 : 0));
+                          setSuccessMessage("Conceito fixado com êxito na memória!");
+                        }}
+                        className="bg-emerald-950/40 border border-emerald-900/50 text-emerald-400 font-extrabold px-3 py-1.5 rounded-lg text-xs transition-all hover:bg-emerald-900/40"
+                      >
+                        Acertei / Fácil
+                      </button>
+                    </div>
+
+                    <span className="text-[10px] text-slate-500 font-bold">
+                      {currentCardIndex + 1} de {flashcards.length}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-10 text-slate-500 bg-slate-950 rounded-2xl border border-slate-900 text-xs">
+                  A sua pilha de flashcards está vazia de momento. Use o ícone de IA no edital para gerar cartões.
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* MODAL: EDIÇÃO DE MÉTRICAS E ANOTAÇÕES DE TÓPICO */}
+      {selectedTopic && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative animate-fade-in">
+            <div className="flex justify-between items-start">
+              <div>
+                <h4 className="text-[9px] font-bold text-violet-400 uppercase tracking-wider">Mapeamento de Desempenho</h4>
+                <h3 className="font-extrabold text-sm text-slate-200 mt-0.5">{selectedTopic.nome}</h3>
+              </div>
+              <button onClick={() => setSelectedTopic(null)} className="text-slate-500 hover:text-slate-300">✕</button>
+            </div>
+
+            {/* FORMULÁRIO DE MÉTRICAS */}
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                const target = e.target as any;
+                const feitas = Number(target.questoes.value || 0);
+                const acertos = Number(target.acertos.value || 0);
+                const tempo = Number(target.tempo.value || 0);
+                
+                let sId = "";
+                activeConcurso.materias.forEach(m => {
+                  if (m.topicos.some(t => t.id === selectedTopic.id)) sId = m.id;
+                });
+
+                addTopicMetrics(sId, selectedTopic.id, feitas, acertos, tempo);
+              }}
+              className="space-y-4 border-t border-b border-slate-800/60 py-4"
+            >
+              <div className="grid grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Ques. Feitas</label>
+                  <input name="questoes" type="number" className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1 px-2.5 text-xs focus:outline-none focus:border-violet-500" placeholder="Ex: 20" />
+                </div>
+                <div>
+                  <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Acertos</label>
+                  <input name="acertos" type="number" className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1 px-2.5 text-xs focus:outline-none focus:border-violet-500" placeholder="Ex: 17" />
+                </div>
+                <div>
+                  <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Minutos</label>
+                  <input name="tempo" type="number" className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1 px-2.5 text-xs focus:outline-none focus:border-violet-500" placeholder="Ex: 40" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 text-xs">
+                <button type="button" onClick={() => setSelectedTopic(null)} className="bg-slate-950 text-slate-400 border border-slate-800 hover:text-white px-3 py-1.5 rounded-lg font-bold">
+                  Fechar
+                </button>
+                <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white px-4 py-1.5 rounded-lg font-bold transition-all">
+                  Computar Dados
+                </button>
+              </div>
+            </form>
+
+            {/* BLOCO DE NOTAS DE ESTUDO */}
+            <div className="space-y-2">
+              <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block">Caderno de Apontamentos Técnicos</label>
+              <textarea 
+                className="w-full h-24 bg-slate-950 border border-slate-850 rounded-lg p-3 text-xs text-slate-300 focus:outline-none focus:border-violet-500 resize-none"
+                placeholder="Introduza conceitos chaves, mnemónicas ou resumos de artigos de lei..."
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+              />
+              <button 
+                onClick={() => {
+                  let sId = "";
+                  activeConcurso.materias.forEach(m => {
+                    if (m.topicos.some(t => t.id === selectedTopic.id)) sId = m.id;
+                  });
+                  saveTopicNotes(sId, selectedTopic.id, noteText);
+                }}
+                className="w-full bg-slate-950 hover:bg-slate-900 text-violet-400 border border-slate-800 py-1.5 rounded-lg text-xs font-bold transition-all"
+              >
+                Salvar Anotações
+              </button>
+            </div>
+          </div>
         </div>
-      </main>
+      )}
+
     </div>
   );
 }
