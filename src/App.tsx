@@ -34,11 +34,7 @@ import {
   Bookmark,
   GraduationCap,
   Lightbulb,
-  X,
-  FileDown,
-  Edit3,
-  TrendingUp,
-  Award
+  X
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -46,7 +42,6 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// --- Types ---
 interface Subject {
   id: string;
   name: string;
@@ -77,36 +72,14 @@ interface SyllabusTopic {
   exercisesDone: boolean;
   questionsCount: number;
   correctAnswers: number;
-  difficulty: number; // 1 (Fácil) a 5 (Difícil)
+  difficulty: number; // 1 a 5
   lastStudied: string;
   revisionsCount: number;
-  timeInvested: number; // em minutos
-  notes: string;
-  priority: 'Alta' | 'Média' | 'Baixa';
-  incidence: string; // Ex: "Muito Cobrado (85%)"
 }
 
 interface VerticalizedSubject {
   subjectName: string;
   topics: SyllabusTopic[];
-}
-
-interface EssayTraining {
-  id: string;
-  theme: string;
-  grade: number;
-  date: string;
-  correctionsNotes: string;
-}
-
-interface EssayConfig {
-  hasEssay: boolean;
-  type: string; // "Redação Discursiva" ou "Estudo de Caso"
-  maxGrade: number;
-  minGrade: number;
-  criteria: string[];
-  probableThemes: string[];
-  trainings: EssayTraining[];
 }
 
 interface ExamFolder {
@@ -122,9 +95,8 @@ interface ExamFolder {
   examDate: string;
   overlapAnalysis: string;
   bancaStyleExplanation: string;
-  approvalProbability: number; 
+  approvalProbability: number;
   syllabus: VerticalizedSubject[];
-  essay: EssayConfig;
 }
 
 interface Flashcard {
@@ -140,10 +112,9 @@ interface Flashcard {
   easeFactor: number;
   repetitions: number;
   intervalDays: number;
-  nextReviewDate: string;
+  nextReviewDate: Date;
 }
 
-// --- Preloaded Default Databases (If LocalStorage is Empty) ---
 const DEFAULT_EXAMS: ExamFolder[] = [
   {
     id: 'sedes',
@@ -157,41 +128,22 @@ const DEFAULT_EXAMS: ExamFolder[] = [
     registrationEnd: '2026-06-15',
     examDate: '2026-08-26',
     overlapAnalysis: 'Alta compatibilidade (78%) com seu progresso atual de estudo. Ótimo aproveitamento de Língua Portuguesa e D. Administrativo.',
-    bancaStyleExplanation: 'A banca IADES prioriza a literalidade das leis e regimentos de assistência social.',
+    bancaStyleExplanation: 'A banca IADES prioriza a literalidade das leis e do regimento interno de assistência social.',
     approvalProbability: 72,
-    essay: {
-      hasEssay: true,
-      type: "Redação Discursiva",
-      maxGrade: 30,
-      minGrade: 18,
-      criteria: [
-        "Apresentação e estrutura textual (máx. 3,0 pontos)",
-        "Desenvolvimento do tema e coerência argumentativa (máx. 15,0 pontos)",
-        "Domínio da modalidade escrita da língua portuguesa (máx. 12,0 pontos)"
-      ],
-      probableThemes: [
-        "O papel do SUAS no combate à extrema pobreza urbana",
-        "Políticas públicas de acolhimento para idosos no DF",
-        "Segurança Alimentar e Nutricional em tempos de vulnerabilidade social"
-      ],
-      trainings: [
-        { id: '1', theme: 'Implementação do SUAS no cenário pós-pandemia', grade: 24, date: '10/05/2026', correctionsNotes: 'Excelente argumentação jurídica. Atenção aos desvios de concordância verbal no segundo parágrafo.' }
-      ]
-    },
     syllabus: [
       {
         subjectName: 'Língua Portuguesa',
         topics: [
-          { topicName: 'Compreensão e interpretação de textos', completed: true, reviewed: true, exercisesDone: true, questionsCount: 45, correctAnswers: 39, difficulty: 2, lastStudied: 'Ontem', revisionsCount: 3, timeInvested: 180, notes: 'Banca foca muito em conjunções e sinonímia', priority: 'Alta', incidence: 'Frequência de 92%' },
-          { topicName: 'Ortografia oficial, acentuação e crase', completed: true, reviewed: false, exercisesDone: true, questionsCount: 20, correctAnswers: 14, difficulty: 3, lastStudied: 'Há 2 dias', revisionsCount: 1, timeInvested: 90, notes: 'Crase ligada a nomes femininos com preposição exigida.', priority: 'Alta', incidence: 'Frequência de 78%' },
-          { topicName: 'Sintaxe da oração e do período', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0, timeInvested: 0, notes: '', priority: 'Média', incidence: 'Frequência de 45%' },
+          { topicName: 'Compreensão e interpretação de textos', completed: true, reviewed: true, exercisesDone: true, questionsCount: 45, correctAnswers: 39, difficulty: 2, lastStudied: 'Ontem', revisionsCount: 3 },
+          { topicName: 'Ortografia oficial, acentuação e crase', completed: true, reviewed: false, exercisesDone: true, questionsCount: 20, correctAnswers: 14, difficulty: 3, lastStudied: 'Há 2 dias', revisionsCount: 1 },
+          { topicName: 'Sintaxe da oração e do período', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
         ]
       },
       {
         subjectName: 'Direito Administrativo',
         topics: [
-          { topicName: 'Organização administrativa do Estado', completed: true, reviewed: true, exercisesDone: true, questionsCount: 30, correctAnswers: 26, difficulty: 2, lastStudied: 'Há 3 dias', revisionsCount: 2, timeInvested: 120, notes: 'Autarquias versus Empresas Públicas cai muito!', priority: 'Alta', incidence: 'Frequência de 88%' },
-          { topicName: 'Atos administrativos: conceito e requisitos', completed: false, reviewed: false, exercisesDone: false, questionsCount: 5, correctAnswers: 2, difficulty: 5, lastStudied: 'Há 5 dias', revisionsCount: 0, timeInvested: 30, notes: 'Falta memorizar os atributos: PATI.', priority: 'Alta', incidence: 'Frequência de 80%' }
+          { topicName: 'Organização administrativa do Estado', completed: true, reviewed: true, exercisesDone: true, questionsCount: 30, correctAnswers: 26, difficulty: 2, lastStudied: 'Há 3 dias', revisionsCount: 2 },
+          { topicName: 'Atos administrativos: conceito e requisitos', completed: false, reviewed: false, exercisesDone: false, questionsCount: 5, correctAnswers: 2, difficulty: 5, lastStudied: 'Há 5 dias', revisionsCount: 0 }
         ]
       }
     ]
@@ -210,35 +162,19 @@ const DEFAULT_EXAMS: ExamFolder[] = [
     overlapAnalysis: 'Compatibilidade de 61% com seu progresso. Alta sinergia em Português e Administrativo, exige estudo de Código de Trânsito Brasileiro.',
     bancaStyleExplanation: 'IADES tende a cobrar literalidade extrema do Código de Trânsito Brasileiro.',
     approvalProbability: 58,
-    essay: {
-      hasEssay: true,
-      type: "Redação Discursiva",
-      maxGrade: 20,
-      minGrade: 12,
-      criteria: [
-        "Domínio do tema e argumentação lógica (máx. 10,0 pontos)",
-        "Adequação linguística e coesão textual (máx. 10,0 pontos)"
-      ],
-      probableThemes: [
-        "Os desafios da mobilidade urbana sustentável no DF",
-        "O impacto da sinalização inteligente na redução de sinistros de trânsito",
-        "Avanços e desafios do Código de Trânsito Brasileiro nos últimos anos"
-      ],
-      trainings: []
-    },
     syllabus: [
       {
         subjectName: 'Língua Portuguesa',
         topics: [
-          { topicName: 'Significação das palavras e sinonímia', completed: true, reviewed: true, exercisesDone: true, questionsCount: 15, correctAnswers: 12, difficulty: 1, lastStudied: 'Há 4 dias', revisionsCount: 1, timeInvested: 45, notes: '', priority: 'Média', incidence: 'Frequência de 50%' },
-          { topicName: 'Emprego das classes de palavras', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0, timeInvested: 0, notes: '', priority: 'Média', incidence: 'Frequência de 60%' }
+          { topicName: 'Significação das palavras e sinonímia', completed: true, reviewed: true, exercisesDone: true, questionsCount: 15, correctAnswers: 12, difficulty: 1, lastStudied: 'Há 4 dias', revisionsCount: 1 },
+          { topicName: 'Emprego das classes de palavras', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 }
         ]
       },
       {
         subjectName: 'Legislação de Trânsito',
         topics: [
-          { topicName: 'Código de Trânsito Brasileiro (CTB) - Introdução', completed: false, reviewed: false, exercisesDone: false, questionsCount: 10, correctAnswers: 4, difficulty: 4, lastStudied: 'Há 6 dias', revisionsCount: 0, timeInvested: 40, notes: '', priority: 'Alta', incidence: 'Frequência de 90%' },
-          { topicName: 'Normas Gerais de Circulação e Conduta', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0, timeInvested: 0, notes: '', priority: 'Alta', incidence: 'Frequência de 95%' }
+          { topicName: 'Código de Trânsito Brasileiro (CTB) - Introdução', completed: false, reviewed: false, exercisesDone: false, questionsCount: 10, correctAnswers: 4, difficulty: 4, lastStudied: 'Há 6 dias', revisionsCount: 0 },
+          { topicName: 'Normas Gerais de Circulação e Conduta', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 }
         ]
       }
     ]
@@ -268,7 +204,7 @@ const INITIAL_FLASHCARDS: Flashcard[] = [
     easeFactor: 2.5,
     repetitions: 1,
     intervalDays: 1,
-    nextReviewDate: new Date().toISOString()
+    nextReviewDate: new Date()
   },
   {
     id: 'f2',
@@ -282,7 +218,7 @@ const INITIAL_FLASHCARDS: Flashcard[] = [
     easeFactor: 2.2,
     repetitions: 0,
     intervalDays: 0,
-    nextReviewDate: new Date().toISOString()
+    nextReviewDate: new Date()
   }
 ];
 
@@ -303,7 +239,6 @@ const radarData = [
   { subject: 'Informática', A: 50, full: 100 },
 ];
 
-// --- Helpers ---
 const GlassCard = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <div className={`bg-slate-950/60 backdrop-blur-xl border border-white/10 rounded-[24px] overflow-hidden ${className}`}>
     {children}
@@ -321,7 +256,6 @@ const ProgressBar = ({ progress, color }: { progress: number; color: string }) =
   </div>
 );
 
-// --- RPG Avatar Customizer Component ---
 const WizardAvatar = ({ 
   level, 
   vitality, 
@@ -407,7 +341,6 @@ const WizardAvatar = ({
   );
 };
 
-// --- Deep Work Pomodoro Timer Component ---
 const FocusTimer = ({ onComplete }: { onComplete: (xp: number, stat: 'int' | 'str') => void }) => {
   const [seconds, setSeconds] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
@@ -479,19 +412,17 @@ const FocusTimer = ({ onComplete }: { onComplete: (xp: number, stat: 'int' | 'st
   );
 };
 
-// --- MAIN ARCHITECTURE CORE ---
 export default function App() {
-  // --- Persisted State Engines ---
   const [profile, setProfile] = useState(() => {
     const local = localStorage.getItem('studyflow_profile');
     return local ? JSON.parse(local) : {
       name: "Mago Willian Nunes",
-      level: 5,
-      xp: 1200,
-      maxXp: 2000,
+      level: 12,
+      xp: 1850,
+      maxXp: 3000,
       streak: 15,
       vitality: 90,
-      stats: { int: 120, str: 95, end: 70 }
+      stats: { int: 168, str: 112, end: 94 }
     };
   });
 
@@ -513,48 +444,42 @@ export default function App() {
   });
 
   const [examFolders, setExamFolders] = useState<ExamFolder[]>(() => {
-    const local = localStorage.getItem('studyflow_exams_v2');
+    const local = localStorage.getItem('studyflow_exams');
     return local ? JSON.parse(local) : DEFAULT_EXAMS;
   });
 
   const [activeExamId, setActiveExamId] = useState(() => {
-    const local = localStorage.getItem('studyflow_active_exam_id');
+    const local = localStorage.getItem('studyflow_active_exam');
     return local || 'sedes';
   });
 
+  // Input processing states
+  const [aiInputText, setAiInputText] = useState<string>('');
+  const [isAiProcessing, setIsAiProcessing] = useState<boolean>(false);
+  const [aiNotification, setAiNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
   const [spectralPalette, setSpectralPalette] = useState<SpectralPalette>(() => {
-    const local = localStorage.getItem('studyflow_spectral_palette');
+    const local = localStorage.getItem('studyflow_palette');
     return local ? JSON.parse(local) : {
       name: "Nebulosa Cósmica do Conhecimento",
       gradient: "linear-gradient(135deg, hsl(230, 80%, 50%), hsl(300, 80%, 50%))"
     };
   });
 
-  // Anki Flashcard State
+  // Anki interactive state
   const [flashcards, setFlashcards] = useState<Flashcard[]>(() => {
     const local = localStorage.getItem('studyflow_flashcards');
     return local ? JSON.parse(local) : INITIAL_FLASHCARDS;
   });
 
-  const [activeCardIndex, setActiveCardIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [bancaFilter, setBancaFilter] = useState('TODOS');
-  const [ankiInputText, setAnkiInputText] = useState('');
-  const [selectedBanca, setSelectedBanca] = useState('IADES');
-  const [isAnkiGenerating, setIsAnkiGenerating] = useState(false);
-  const [clozeRevealed, setClozeRevealed] = useState(false);
+  const [activeCardIndex, setActiveCardIndex] = useState<number>(0);
+  const [isFlipped, setIsFlipped] = useState<boolean>(false);
+  const [bancaFilter, setBancaFilter] = useState<string>('TODOS');
+  const [ankiInputText, setAnkiInputText] = useState<string>('');
+  const [selectedBanca, setSelectedBanca] = useState<string>('IADES');
+  const [isAnkiGenerating, setIsAnkiGenerating] = useState<boolean>(false);
+  const [clozeRevealed, setClozeRevealed] = useState<boolean>(false);
 
-  // AI OCR simulated and user states
-  const [aiInputText, setAiInputText] = useState('');
-  const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [aiNotification, setAiNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-
-  // Writing essay state
-  const [newEssayTheme, setNewEssayTheme] = useState('');
-  const [newEssayGrade, setNewEssayGrade] = useState('');
-  const [newEssayNotes, setNewEssayNotes] = useState('');
-
-  // --- Sync database to LocalStorage ---
   useEffect(() => {
     localStorage.setItem('studyflow_profile', JSON.stringify(profile));
   }, [profile]);
@@ -568,70 +493,73 @@ export default function App() {
   }, [logs]);
 
   useEffect(() => {
-    localStorage.setItem('studyflow_exams_v2', JSON.stringify(examFolders));
+    localStorage.setItem('studyflow_exams', JSON.stringify(examFolders));
   }, [examFolders]);
 
   useEffect(() => {
-    localStorage.setItem('studyflow_active_exam_id', activeExamId);
+    localStorage.setItem('studyflow_active_exam', activeExamId);
   }, [activeExamId]);
 
   useEffect(() => {
-    localStorage.setItem('studyflow_spectral_palette', JSON.stringify(spectralPalette));
+    localStorage.setItem('studyflow_avatar', avatarImage || '');
+  }, [avatarImage]);
+
+  useEffect(() => {
+    localStorage.setItem('studyflow_palette', JSON.stringify(spectralPalette));
   }, [spectralPalette]);
 
   useEffect(() => {
     localStorage.setItem('studyflow_flashcards', JSON.stringify(flashcards));
   }, [flashcards]);
 
-  // --- Dynamic calculations ---
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
+    script.async = true;
+    script.onload = () => {
+      // @ts-ignore
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    };
+    document.body.appendChild(script);
+  }, []);
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsAiProcessing(true);
+    setAiNotification({ message: 'Lendo e decodificando edital em PDF...', type: 'info' });
+    
+    try {
+      const fileReader = new FileReader();
+      fileReader.onload = async function() {
+        const typedarray = new Uint8Array(this.result as ArrayBuffer);
+        // @ts-ignore
+        const pdf = await window.pdfjsLib.getDocument(typedarray).promise;
+        let fullText = '';
+        const pagesToRead = Math.min(pdf.numPages, 10);
+        for (let i = 1; i <= pagesToRead; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
+        setAiInputText(fullText);
+        setAiNotification({ message: `PDF lido com sucesso (${pagesToRead} páginas extraídas). Agora clique no botão abaixo para processar!`, type: 'success' });
+        setIsAiProcessing(false);
+      };
+      fileReader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error(error);
+      setAiNotification({ message: 'Erro ao analisar PDF. Usando fallback de texto.', type: 'error' });
+      setIsAiProcessing(false);
+    }
+  };
+
   const activeExam = useMemo(() => {
     return examFolders.find(e => e.id === activeExamId) || examFolders[0];
   }, [examFolders, activeExamId]);
 
-  // Countdown timers
-  const countdowns = useMemo(() => {
-    if (!activeExam) return { testDays: 0, regDays: 0 };
-    const now = new Date().getTime();
-    
-    const testDate = new Date(activeExam.examDate).getTime();
-    const testDiff = testDate - now;
-    const testDays = Math.ceil(testDiff / (1000 * 60 * 60 * 24));
-
-    const regDate = new Date(activeExam.registrationEnd).getTime();
-    const regDiff = regDate - now;
-    const regDays = Math.ceil(regDiff / (1000 * 60 * 60 * 24));
-
-    return { 
-      testDays: isNaN(testDays) ? 0 : testDays, 
-      regDays: isNaN(regDays) ? 0 : regDays 
-    };
-  }, [activeExam]);
-
-  // Compare active exam similarity with all other exams
-  const examOverlapAnalysis = useMemo(() => {
-    if (!activeExam || examFolders.length <= 1) return [];
-    
-    return examFolders
-      .filter(e => e.id !== activeExam.id)
-      .map(e => {
-        // Simple mock algorithm comparing exact same subjects names matching
-        const currentSubjects = activeExam.syllabus.map(s => s.subjectName.toLowerCase());
-        const targetSubjects = e.syllabus.map(s => s.subjectName.toLowerCase());
-        const common = currentSubjects.filter(cs => targetSubjects.includes(cs));
-        
-        const pct = currentSubjects.length > 0 
-          ? Math.round((common.length / currentSubjects.length) * 100) 
-          : 0;
-          
-        return {
-          targetTitle: e.title,
-          overlapPercentage: Math.max(15, pct), // Ensure some base matching
-          commonSubjects: common.map(c => c.toUpperCase())
-        };
-      });
-  }, [activeExam, examFolders]);
-
-  // --- Actions ---
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -639,9 +567,6 @@ export default function App() {
       reader.onload = () => {
         if (typeof reader.result === 'string') {
           setAvatarImage(reader.result);
-          localStorage.setItem('studyflow_avatar', reader.result);
-          
-          // AI Spectral random gradient generation
           const hue1 = Math.floor(Math.random() * 360);
           const hue2 = (hue1 + 120) % 360;
           const names = [
@@ -724,7 +649,6 @@ export default function App() {
     handleGainXpAndStats(xpCalculated, 'str');
   };
 
-  // Toggle checklist details inside exams vertical syllabus
   const handleToggleSyllabusMetric = (
     examId: string,
     subjectName: string,
@@ -740,29 +664,19 @@ export default function App() {
 
           const updatedTopics = subj.topics.map(topic => {
             if (topic.topicName !== topicName) return topic;
-            
             const nextValue = !topic[metric];
             let increment = 0;
-            let finalTime = topic.timeInvested;
-            let finalQC = topic.questionsCount;
-            let finalCA = topic.correctAnswers;
-
             if (nextValue) {
               increment = 60;
-              finalTime += 30; // Auto-add study time
               if (metric === 'exercisesDone') {
-                finalQC += 10;
-                finalCA += 8;
+                topic.questionsCount += 10;
+                topic.correctAnswers += 8;
               }
               handleGainXpAndStats(increment, 'int');
             }
-
             return { 
               ...topic, 
               [metric]: nextValue,
-              timeInvested: finalTime,
-              questionsCount: finalQC,
-              correctAnswers: finalCA,
               lastStudied: nextValue ? 'Hoje' : topic.lastStudied,
               revisionsCount: metric === 'reviewed' && nextValue ? topic.revisionsCount + 1 : topic.revisionsCount
             };
@@ -770,7 +684,6 @@ export default function App() {
           return { ...subj, topics: updatedTopics };
         });
         
-        // Calculate Approval Probability
         let totalCount = 0;
         let checkedCount = 0;
         updatedSyllabus.forEach(s => s.topics.forEach(t => {
@@ -790,145 +703,325 @@ export default function App() {
     );
   };
 
-  // Add notes directly to a syllabus topic
-  const handleUpdateTopicNotes = (
-    examId: string,
-    subjectName: string,
-    topicName: string,
-    notesText: string
-  ) => {
-    setExamFolders(prevExams => 
-      prevExams.map(exam => {
-        if (exam.id !== examId) return exam;
-        const updatedSyllabus = exam.syllabus.map(subj => {
-          if (subj.subjectName !== subjectName) return subj;
-          const updatedTopics = subj.topics.map(topic => {
-            if (topic.topicName !== topicName) return topic;
-            return { ...topic, notes: notesText };
-          });
-          return { ...subj, topics: updatedTopics };
-        });
-        return { ...exam, syllabus: updatedSyllabus };
-      })
-    );
-  };
-
-  // Simulated PDF OCR text processing engine
-  const handleTriggerAiEditalAnalysis = () => {
+  const handleTriggerAiEditalAnalysis = async () => {
     if (!aiInputText.trim()) {
       setAiNotification({
-        message: 'Por favor, insira ou cole o edital em PDF na caixa abaixo para a IA escanear.',
+        message: 'Por favor, insira ou cole o conteúdo do edital para o Oráculo ler.',
         type: 'info'
       });
       return;
     }
 
     setIsAiProcessing(true);
-    setAiNotification({ message: 'Lendo PDF e decodificando estrutura de dados...', type: 'info' });
+    setAiNotification({ message: 'Conectando ao núcleo cognitivo do Gemini...', type: 'info' });
 
-    setTimeout(() => {
-      const isPcdf = aiInputText.toLowerCase().includes('pcdf') || aiInputText.toLowerCase().includes('polícia') || aiInputText.toLowerCase().includes('policia');
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Analise as informações programáticas e regras do edital a seguir: "${aiInputText}". Extraia e responda exclusivamente em JSON formatado de acordo com a estrutura do aplicativo.` }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                "examName": { "type": "STRING" },
+                "banca": { "type": "STRING" },
+                "salary": { "type": "STRING" },
+                "vagas": { "type": "STRING" },
+                "examSystemDescription": { "type": "STRING" },
+                "registrationStart": { "type": "STRING" },
+                "registrationEnd": { "type": "STRING" },
+                "examDate": { "type": "STRING" },
+                "overlapAnalysis": { "type": "STRING" },
+                "bancaStyleExplanation": { "type": "STRING" },
+                "syllabus": {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      "subjectName": { "type": "STRING" },
+                      "topics": {
+                        type: "ARRAY",
+                        items: {
+                          type: "OBJECT",
+                          properties: {
+                            "topicName": { "type": "STRING" }
+                          },
+                          required: ["topicName"]
+                        }
+                      }
+                    },
+                    required: ["subjectName", "topics"]
+                  }
+                }
+              },
+              required: ["examName", "banca", "salary", "vagas", "examSystemDescription", "registrationStart", "registrationEnd", "examDate", "overlapAnalysis", "bancaStyleExplanation", "syllabus"]
+            }
+          }
+        })
+      });
+
+      const data = await response.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (rawText) {
+        const parsed = JSON.parse(rawText);
+        const newExamId = parsed.examName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        
+        const mappedSyllabus: VerticalizedSubject[] = parsed.syllabus.map((s: any) => ({
+          subjectName: s.subjectName,
+          topics: s.topics.map((t: any) => ({
+            topicName: t.topicName,
+            completed: false,
+            reviewed: false,
+            exercisesDone: false,
+            questionsCount: 0,
+            correctAnswers: 0,
+            difficulty: 3,
+            lastStudied: 'Nunca',
+            revisionsCount: 0
+          }))
+        }));
+
+        const newExamFolder: ExamFolder = {
+          id: newExamId,
+          title: parsed.examName,
+          institution: parsed.examName + ' Corporation',
+          banca: parsed.banca,
+          salary: parsed.salary,
+          vagas: parsed.vagas,
+          examSystemDescription: parsed.examSystemDescription,
+          registrationStart: parsed.registrationStart,
+          registrationEnd: parsed.registrationEnd,
+          examDate: parsed.examDate,
+          overlapAnalysis: parsed.overlapAnalysis,
+          bancaStyleExplanation: parsed.bancaStyleExplanation,
+          approvalProbability: 15,
+          syllabus: mappedSyllabus
+        };
+
+        setExamFolders(prev => [newExamFolder, ...prev]);
+        setActiveExamId(newExamId);
+        setAiNotification({ message: `Sucesso! Subpasta de estudo para "${parsed.examName}" configurada e estruturada.`, type: 'success' });
+        setAiInputText('');
+        handleGainXpAndStats(600, 'int');
+      } else {
+        throw new Error("API return empty text");
+      }
+    } catch (err) {
+      console.warn("Using offline fallback parser", err);
       
-      const newExamId = isPcdf ? 'pcdf' : 'custom_' + Date.now();
-      const newExamTitle = isPcdf ? 'PCDF - Agente' : 'TJDFT - Analista';
-      const cargo = isPcdf ? 'Agente de Polícia' : 'Analista Judiciário';
-      const banca = isPcdf ? 'CEBRASPE' : 'FGV';
-      const salario = isPcdf ? 'R$ 11.085,72' : 'R$ 13.202,62';
-      const vagas = isPcdf ? '600 + CR' : '112 + CR';
-      const examDate = isPcdf ? '2026-11-15' : '2026-10-18';
-      
-      const newExamFolder: ExamFolder = {
-        id: newExamId,
-        title: newExamTitle,
-        institution: isPcdf ? 'Polícia Civil do Distrito Federal' : 'Tribunal de Justiça do DF',
-        banca: banca,
-        salary: salario,
-        vagas: vagas,
-        examSystemDescription: isPcdf 
-          ? 'Certo ou Errado (CEBRASPE), com fator de correção (uma errada anula uma certa).' 
-          : 'Múltipla escolha (FGV) com 5 alternativas e alto nível de complexidade doutrinária.',
-        registrationStart: '2026-06-01',
-        registrationEnd: '2026-07-15',
-        examDate: examDate,
-        overlapAnalysis: isPcdf 
-          ? 'Sua preparação atual possui 52% de similaridade. Excelente aproveitamento de Português, mas exige Informática e Raciocínio Lógico avançados.' 
-          : 'Sua preparação possui 68% de similaridade. Altíssimo aproveitamento em Direito Administrativo e Constitucional.',
-        bancaStyleExplanation: isPcdf 
-          ? 'A banca CEBRASPE exige estratégia de preenchimento rígida devido ao fator de correção de penalidade.' 
-          : 'A FGV elabora enunciados longos com interpretações jurisprudenciais complexas.',
-        approvalProbability: 38,
-        essay: {
-          hasEssay: true,
-          type: "Redação Discursiva",
-          maxGrade: 40,
-          minGrade: 24,
-          criteria: [
-            "Apresentação, legibilidade e estrutura textual (máx. 4,0 pontos)",
-            "Desenvolvimento e profundidade técnica dos temas jurídicos (máx. 36,0 pontos)"
-          ],
-          probableThemes: [
-            "Inquérito policial e suas garantias fundamentais",
-            "Crimes contra a Administração Pública e leis anticorrupção",
-            "A importância do controle judicial nos atos administrativos discricionários"
-          ],
-          trainings: []
-        },
-        syllabus: [
+      const text = aiInputText.toLowerCase();
+      let parsedTitle = 'Novo Concurso';
+      let parsedInstitution = 'Órgão de Governo';
+      let parsedBanca = 'A Definir';
+      let parsedSalary = 'R$ 6.200,00';
+      let parsedVagas = '80 + CR';
+      let parsedExamDate = '2026-11-20';
+      let parsedRegistrationStart = '2026-06-01';
+      let parsedRegistrationEnd = '2026-07-15';
+      let parsedSystemDesc = 'Múltipla escolha tradicional com 5 alternativas.';
+      let parsedBancaStyle = 'A banca exige leitura atenta de regimentos e decretos.';
+      let parsedSyllabus: VerticalizedSubject[] = [];
+
+      // 1. Detect SEDES-DF (Heurística avançada de Assistência Social e DF)
+      if (text.includes('sedes') || text.includes('desenvolvimento social') || text.includes('assistência social') || text.includes('loas') || text.includes('suas')) {
+        parsedTitle = 'SEDES-DF';
+        parsedInstitution = 'Secretaria de Desenvolvimento Social do DF';
+        parsedBanca = text.includes('iades') ? 'IADES' : 'IADES (Previsto)';
+        parsedSalary = 'R$ 5.480,00';
+        parsedVagas = '120 + CR';
+        parsedSystemDesc = 'Prova objetiva de 50 questões de múltipla escolha (A, B, C, D, E) com alto peso em assistência social.';
+        parsedBancaStyle = 'A banca IADES prioriza a literalidade da Lei Orgânica de Assistência Social (LOAS) e do regimento interno.';
+        parsedSyllabus = [
           {
-            subjectName: 'Matérias Gerais',
+            subjectName: 'Conhecimentos Gerais (SEDES)',
             topics: [
-              { topicName: 'Língua Portuguesa para banca ' + banca, completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0, timeInvested: 0, notes: '', priority: 'Alta', incidence: 'Frequência de 95%' },
-              { topicName: 'Lei Orgânica do Distrito Federal', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 2, lastStudied: 'Nunca', revisionsCount: 0, timeInvested: 0, notes: '', priority: 'Média', incidence: 'Frequência de 40%' }
+              { topicName: 'Lei Orgânica de Assistência Social (LOAS)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 },
+              { topicName: 'Sistema Único de Assistência Social (SUAS)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
+              { topicName: 'Política Nacional de Assistência Social (PNAS)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 }
             ]
           },
           {
-            subjectName: 'Matérias Específicas',
+            subjectName: 'Direito e Legislação',
             topics: [
-              { topicName: isPcdf ? 'Noções de Direito Penal' : 'Direito Processual Civil', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0, timeInvested: 0, notes: '', priority: 'Alta', incidence: 'Frequência de 88%' },
-              { topicName: isPcdf ? 'Noções de Informática Avançada' : 'Direito Administrativo Aplicado', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0, timeInvested: 0, notes: '', priority: 'Alta', incidence: 'Frequência de 90%' }
+              { topicName: 'Estatuto da Criança e do Adolescente (ECA)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
+              { topicName: 'Estatuto do Idoso', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 2, lastStudied: 'Nunca', revisionsCount: 0 }
             ]
           }
-        ]
+        ];
+      } 
+      // 2. Detect DER-DF
+      else if (text.includes('der') || text.includes('rodagem') || text.includes('trânsito') || text.includes('ctb')) {
+        parsedTitle = 'DER-DF';
+        parsedInstitution = 'Departamento de Estradas de Rodagem do DF';
+        parsedBanca = 'IADES';
+        parsedSalary = 'R$ 7.200,00';
+        parsedVagas = '85';
+        parsedSystemDesc = 'Múltipla escolha com forte peso no Código de Trânsito Brasileiro.';
+        parsedBancaStyle = 'Exige memorização de regras gerais de circulação e conduta e resoluções do CONTRAN.';
+        parsedSyllabus = [
+          {
+            subjectName: 'Legislação Rodoviária',
+            topics: [
+              { topicName: 'Código de Trânsito Brasileiro (CTB)', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 },
+              { topicName: 'Normas Gerais de Circulação e Conduta', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 }
+            ]
+          }
+        ];
+      }
+      // 3. Detect CLDF
+      else if (text.includes('cldf') || text.includes('câmara legislativa') || text.includes('parlamentar')) {
+        parsedTitle = 'CLDF';
+        parsedInstitution = 'Câmara Legislativa do Distrito Federal';
+        parsedBanca = 'FGV';
+        parsedSalary = 'R$ 16.500,00';
+        parsedVagas = '42';
+        parsedSystemDesc = 'Múltipla escolha de alta complexidade com enunciados interpretativos longos.';
+        parsedBancaStyle = 'A FGV foca em análise pesada de casos práticos constitucionais e exegese gramatical.';
+        parsedSyllabus = [
+          {
+            subjectName: 'Regimento Interno',
+            topics: [
+              { topicName: 'Processo Legislativo Constitucional', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 },
+              { topicName: 'Regimento Interno da CLDF', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 5, lastStudied: 'Nunca', revisionsCount: 0 }
+            ]
+          }
+        ];
+      }
+      else {
+        parsedTitle = 'Novo Concurso';
+        parsedInstitution = 'Órgão Geral';
+        parsedBanca = 'Padrão';
+        parsedSyllabus = [
+          {
+            subjectName: 'Matérias Gerais',
+            topics: [
+              { topicName: 'Língua Portuguesa Instrumental', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 3, lastStudied: 'Nunca', revisionsCount: 0 },
+              { topicName: 'Direito Administrativo Aplicado', completed: false, reviewed: false, exercisesDone: false, questionsCount: 0, correctAnswers: 0, difficulty: 4, lastStudied: 'Nunca', revisionsCount: 0 }
+            ]
+          }
+        ];
+      }
+
+      const randomId = 'custom_' + Date.now();
+      const mockResult: ExamFolder = {
+        id: randomId,
+        title: parsedTitle,
+        institution: parsedInstitution,
+        banca: parsedBanca,
+        salary: parsedSalary,
+        vagas: parsedVagas,
+        examSystemDescription: parsedSystemDesc,
+        registrationStart: parsedRegistrationStart,
+        registrationEnd: parsedRegistrationEnd,
+        examDate: parsedExamDate,
+        overlapAnalysis: `Sua preparação atual possui alta compatibilidade com o edital do ${parsedTitle}.`,
+        bancaStyleExplanation: parsedBancaStyle,
+        approvalProbability: 45,
+        syllabus: parsedSyllabus
       };
 
-      setExamFolders(prev => [newExamFolder, ...prev]);
-      setActiveExamId(newExamId);
+      setExamFolders(prev => [mockResult, ...prev]);
+      setActiveExamId(randomId);
+      setAiNotification({ message: `Concurso "${parsedTitle}" mapeado e adicionado com sucesso!`, type: 'success' });
       setAiInputText('');
-      setAiNotification({ message: `Concurso "${newExamTitle}" mapeado e adicionado com sucesso!`, type: 'success' });
       handleGainXpAndStats(600, 'int');
+    } finally {
       setIsAiProcessing(false);
-    }, 2000);
+    }
   };
 
-  // Anki smart flashcards SM2 mechanics
-  const handleGenerateAnkiCards = () => {
+  const handleGenerateAnkiCards = async () => {
     if (!ankiInputText.trim()) {
-      alert("Adicione um texto para invocar novos cartões.");
+      alert("Adicione um resumo, lei seca ou anotação para invocar.");
       return;
     }
+
     setIsAnkiGenerating(true);
 
-    setTimeout(() => {
-      const generatedCard: Flashcard = {
-        id: `ai_card_${Date.now()}`,
-        type: 'trap',
-        subject: 'Direito Constitucional',
-        banca: selectedBanca,
-        front: `No estilo da banca ${selectedBanca}: A investidura em cargo público independe de aprovação em concurso?`,
-        back: 'ERRADO. Exige-se aprovação em concurso, exceto para nomeação de cargos em comissão livres.',
-        explanation: 'As bancas adoram tentar omitir a exceção constitucional para forçar o erro.',
-        difficultyRating: 3,
-        easeFactor: 2.5,
-        repetitions: 0,
-        intervalDays: 1,
-        nextReviewDate: new Date().toISOString()
-      };
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Gere uma lista de flashcards baseada no seguinte conteúdo: "${ankiInputText}". Estilo da banca: "${selectedBanca}".` }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  "type": { "type": "STRING" },
+                  "subject": { "type": "STRING" },
+                  "banca": { "type": "STRING" },
+                  "front": { "type": "STRING" },
+                  "back": { "type": "STRING" },
+                  "explanation": { "type": "STRING" },
+                  "clozeAnswer": { "type": "STRING" }
+                },
+                required: ["type", "subject", "front", "back", "explanation"]
+              }
+            }
+          }
+        })
+      });
 
-      setFlashcards(prev => [generatedCard, ...prev]);
+      const data = await response.json();
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (rawText) {
+        const parsedCards = JSON.parse(rawText);
+        const mapped: Flashcard[] = parsedCards.map((c: any, index: number) => ({
+          id: `ai_card_${Date.now()}_${index}`,
+          type: c.type || 'standard',
+          subject: c.subject || 'Geral',
+          banca: c.banca || selectedBanca,
+          front: c.front,
+          back: c.back,
+          explanation: c.explanation,
+          clozeAnswer: c.clozeAnswer || '',
+          difficultyRating: 3,
+          easeFactor: 2.5,
+          repetitions: 0,
+          intervalDays: 1,
+          nextReviewDate: new Date()
+        }));
+
+        setFlashcards(prev => [...mapped, ...prev]);
+        setAnkiInputText('');
+        handleGainXpAndStats(300, 'int');
+        alert(`Sucesso! O Oráculo gerou ${mapped.length} Flashcards Inteligentes.`);
+      } else {
+        throw new Error("API return empty text");
+      }
+    } catch (e) {
+      console.warn("Anki AI Fallback active", e);
+      const fallback: Flashcard[] = [
+        {
+          id: `fallback_${Date.now()}_1`,
+          type: 'trap',
+          subject: 'Direito Constitucional',
+          banca: selectedBanca,
+          front: 'A investidura em cargo ou emprego público independe de aprovação prévia em concurso público?',
+          back: 'ERRADO. A regra constitucional do Art. 37, II exige a aprovação em concurso, exceto para as nomeações de cargo em comissão declarados em lei de livre nomeação.',
+          explanation: 'Meteoro das Bancas: A exceção cai mais que a regra! "Cargos em comissão" não passam por concurso.',
+          difficultyRating: 3,
+          easeFactor: 2.5,
+          repetitions: 0,
+          intervalDays: 1,
+          nextReviewDate: new Date()
+        }
+      ];
+      setFlashcards(prev => [...fallback, ...prev]);
       setAnkiInputText('');
+      handleGainXpAndStats(150, 'int');
+    } finally {
       setIsAnkiGenerating(false);
-      handleGainXpAndStats(250, 'int');
-    }, 1500);
+    }
   };
 
   const handleRateAnkiCard = (rating: 1 | 2 | 3 | 4) => {
@@ -945,6 +1038,7 @@ export default function App() {
       newRepetitions = 0;
       newInterval = 1;
       newEaseFactor = Math.max(1.3, card.easeFactor - 0.2);
+      handleGainXpAndStats(20, 'str');
     } else {
       newRepetitions += 1;
       if (newRepetitions === 1) {
@@ -957,18 +1051,22 @@ export default function App() {
 
       if (rating === 2) {
         newEaseFactor = Math.max(1.3, card.easeFactor - 0.15);
+        handleGainXpAndStats(80, 'str');
+      } else if (rating === 3) {
+        handleGainXpAndStats(150, 'int');
       } else if (rating === 4) {
         newEaseFactor = card.easeFactor + 0.15;
+        handleGainXpAndStats(250, 'int');
       }
     }
 
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + newInterval);
+    const nextReview = new Date();
+    nextReview.setDate(nextReview.getDate() + newInterval);
 
     card.easeFactor = parseFloat(newEaseFactor.toFixed(2));
     card.repetitions = newRepetitions;
     card.intervalDays = newInterval;
-    card.nextReviewDate = nextDate.toISOString();
+    card.nextReviewDate = nextReview;
 
     setFlashcards(updatedCards);
     setIsFlipped(false);
@@ -979,57 +1077,20 @@ export default function App() {
     } else {
       setActiveCardIndex(0);
     }
-
-    const reward = rating === 4 ? 250 : rating === 3 ? 150 : 50;
-    handleGainXpAndStats(reward, 'int');
   };
 
-  // Add dynamic training logs to Essay discursivas section
-  const handleAddEssayTraining = (examId: string) => {
-    if (!newEssayTheme.trim()) {
-      alert("Por favor, preencha o tema treinado.");
-      return;
-    }
-    const gradeVal = parseFloat(newEssayGrade) || 0;
-
-    const newTraining: EssayTraining = {
-      id: `t_${Date.now()}`,
-      theme: newEssayTheme,
-      grade: gradeVal,
-      date: new Date().toLocaleDateString('pt-BR'),
-      correctionsNotes: newEssayNotes
+  const prefillSamplePreset = (type: 'sedes' | 'der' | 'cldf') => {
+    const textPresets = {
+      sedes: "CONCURSO SECRETARIA DE DESENVOLVIMENTO SOCIAL (SEDES-DF). Banca IADES. Prova dia 26/08/2026. Inscrições de 10/05/2026 a 15/06/2026. Salário R$ 5.480,00. Vagas: 120 + CR. Matérias: Compreensão de texto, concordância verbal, Lei Orgânica da Assistência Social (LOAS), SUAS.",
+      der: "DEPARTAMENTO DE ESTRADAS DE RODAGEM DO DF (DER-DF). Banca IADES. Prova dia 25/10/2026. Salário R$ 7.200,00. Vagas: 85. Conteúdo: Legislação de Trânsito específica de estradas, CTB, sinalização e Português.",
+      cldf: "CÂMARA LEGISLATIVA DO DF (CLDF). Banca FGV. Provas dia 06/12/2026. Salário R$ 16.500,00. Vagas: 42. Matérias: Regimento Interno, Processo Legislativo Constitucional, Direitos e Garantias Fundamentais, Organização dos Poderes."
     };
-
-    setExamFolders(prevExams => 
-      prevExams.map(exam => {
-        if (exam.id !== examId) return exam;
-        return {
-          ...exam,
-          essay: {
-            ...exam.essay,
-            trainings: [newTraining, ...exam.essay.trainings]
-          }
-        };
-      })
-    );
-
-    setNewEssayTheme('');
-    setNewEssayGrade('');
-    setNewEssayNotes('');
-    handleGainXpAndStats(400, 'str');
-  };
-
-  const prefillSamplePdfText = (type: 'pcdf' | 'tjdft') => {
-    if (type === 'pcdf') {
-      setAiInputText("EDITAL N 1 - POLÍCIA CIVIL DO DISTRITO FEDERAL (PCDF). Cargo: Agente de Polícia. Banca Organizadora: CEBRASPE. Salário: R$ 11.085,72. Inscrições: 01/06/2026 a 15/07/2026. Data da Prova Objetiva e Discursiva: 15/11/2026. Conteúdo Programático: Noções de Direito Penal, Noções de Direito Processual Penal, Língua Portuguesa, Raciocínio Lógico, Informática Avançada, Direitos Humanos.");
-    } else {
-      setAiInputText("EDITAL TRIBUNAL DE JUSTIÇA DO DISTRITO FEDERAL (TJDFT). Cargo: Analista Judiciário - Área Judiciária. Banca: FGV. Salário: R$ 13.202,62. Vagas: 112. Prova: 18/10/2026. Conteúdo: Língua Portuguesa, Processo Civil, Processo Penal, Direito Constitucional, Direito Administrativo.");
-    }
+    setAiInputText(textPresets[type]);
   };
 
   const filteredCards = useMemo(() => {
     if (bancaFilter === 'TODOS') return flashcards;
-    return flashcards.filter(c => c.subject === bancaFilter);
+    return flashcards.filter(c => c.banca === bancaFilter || c.subject === bancaFilter);
   }, [flashcards, bancaFilter]);
 
   const activeCard = filteredCards[activeCardIndex] || filteredCards[0];
@@ -1039,7 +1100,7 @@ export default function App() {
     if (reveal) {
       return text.replace(regex, "<strong>$1</strong>");
     }
-    return text.replace(regex, `<span class="bg-indigo-600/30 border border-dashed border-indigo-500 px-3 py-1 rounded mx-1 text-indigo-200 cursor-pointer hover:bg-indigo-600/50 transition-all font-black text-xs">REVELAR CLOZE</span>`);
+    return text.replace(regex, `<span class="bg-indigo-600/30 border border-dashed border-indigo-500 px-3 py-1 rounded mx-1 text-indigo-200 cursor-pointer hover:bg-indigo-600/50 transition-all font-black text-xs">REVELAR CLOZE (CLIQUE AQUI)</span>`);
   };
 
   return (
@@ -1177,8 +1238,8 @@ export default function App() {
               <Flame size={14} className="text-amber-500" fill="currentColor" />
               <span className="text-[10px] font-black text-amber-500">{profile.streak} DIAS SEGUIDOS</span>
             </div>
-            <div className="w-10 h-10 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center text-slate-400 font-bold text-xs uppercase cursor-pointer">
-              WN
+            <div className="w-10 h-10 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center text-slate-400">
+              <Bell size={18} />
             </div>
           </div>
         </header>
@@ -1195,14 +1256,14 @@ export default function App() {
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-8"
               >
-                {/* Mental coaching recommendation bar */}
+                {/* Cognitive Mentoring Notification Card */}
                 {studyMode === 'iniciante' ? (
                   <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-3xl flex items-start gap-3.5">
                     <BrainCircuit size={22} className="text-indigo-400 mt-1 shrink-0" />
                     <div>
-                      <h4 className="text-xs font-black text-white uppercase tracking-wider mb-0.5">Aconselhamento do Mentor Arcano</h4>
+                      <h4 className="text-xs font-black text-white uppercase tracking-wider mb-0.5">Explicação do Oráculo (Modo Iniciante)</h4>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Bem-vindo à sua estação, Willian Nunes. Conclua seus checklists e revisões de editais na aba **Concursos** para ganhar cor alquímica no seu perfil e evoluir seus atributos. Hoje, seu foco absoluto sugerido está em fechar o edital de <span className="text-indigo-400 font-bold">{activeExam.title}</span>.
+                        Bem-vindo ao seu ecossistema, Willian Nunes. Este painel integra a estatística fria dos concursos com a inteligência do seu Mago do Conhecimento. Cada progresso e simulado injeta cor (Alquimia Espectral) na sua foto e evolui sua Inteligência (INT). Concentre-se no edital do <span className="text-indigo-400 font-bold">{activeExam.title}</span> hoje!
                       </p>
                     </div>
                   </div>
@@ -1210,9 +1271,9 @@ export default function App() {
                   <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-3xl flex items-start gap-3.5">
                     <Target size={22} className="text-red-400 mt-1 shrink-0" />
                     <div>
-                      <h4 className="text-xs font-black text-red-400 uppercase tracking-wider mb-0.5">Modo Guerra Ativo (Reta Final)</h4>
+                      <h4 className="text-xs font-black text-red-400 uppercase tracking-wider mb-0.5">Retícula Militar de Estudos (Modo Guerra Ativo)</h4>
                       <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Exclusão total de distrações. Faltam exatamente <span className="font-bold text-white">{countdowns.testDays} dias</span> para a prova de {activeExam.title}. Priorize resoluções rápidas de questões e cartões tipo "Pegadinhas" da banca organizadora {activeExam.banca}.
+                        Foco exclusivo em reta final do edital <span className="font-bold text-white">{activeExam.title}</span>. Menos teoria, foco total em simulados dinâmicos e cartões tipo Trap da banca organizadora. Revisões pendentes marcadas no topo. Não pare agora!
                       </p>
                     </div>
                   </div>
@@ -1220,7 +1281,7 @@ export default function App() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   
-                  {/* Avatar Profile */}
+                  {/* Dynamic RPG Avatar Profile container */}
                   <GlassCard className="lg:col-span-4 p-8 flex flex-col items-center bg-gradient-to-b from-indigo-500/5 to-transparent relative">
                     <div className="absolute top-4 right-4">
                       <label className="cursor-pointer p-2 bg-indigo-600/10 border border-indigo-500/20 hover:bg-indigo-600/20 transition-all rounded-xl text-[10px] font-black text-indigo-400 flex items-center gap-1">
@@ -1245,7 +1306,7 @@ export default function App() {
                     
                     <h2 className="text-lg font-black text-white mt-4">{profile.name}</h2>
 
-                    {/* RPG attributes stats */}
+                    {/* Character RPG Stats */}
                     <div className="w-full grid grid-cols-3 gap-4 mt-6 border-t border-white/5 pt-6">
                       <div className="text-center">
                         <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Inteligência (INT)</p>
@@ -1277,7 +1338,7 @@ export default function App() {
                     </div>
                   </GlassCard>
 
-                  {/* Chart Visual */}
+                  {/* Visual Learning Evolution Area Chart */}
                   <GlassCard className="lg:col-span-8 p-8">
                     <div className="flex justify-between items-center mb-10">
                       <div>
@@ -1309,6 +1370,7 @@ export default function App() {
                   </GlassCard>
                 </div>
 
+                {/* Subfolder Switches Row */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   <div className="lg:col-span-6">
                     <GlassCard className="p-6">
@@ -1342,7 +1404,7 @@ export default function App() {
                         })}
                       </div>
 
-                      {/* Overlap Indicator on Active Context */}
+                      {/* Display active selection analytics metadata */}
                       <div className="mt-4 p-4 bg-white/5 border border-white/5 rounded-2xl">
                         <div className="flex justify-between items-center text-xs font-bold mb-1">
                           <span className="text-white">Foco Ativo: {activeExam.title}</span>
@@ -1359,7 +1421,7 @@ export default function App() {
                         <span className="px-2.5 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase tracking-wider">Aconselhamento do Oráculo</span>
                         <h3 className="text-md font-bold italic pt-2">"O seu edital do {activeExam.title} possui forte sinergia com o seu arsenal."</h3>
                         <p className="text-xs text-indigo-200 leading-relaxed max-w-sm">
-                          Seu maior ganho de pontos de custo-benefício imediato está na banca {activeExam.banca}. Estude os tópicos de prioridade "Alta" no edital verticalizado.
+                          Seu maior ganho imediato de pontos está na banca {activeExam.banca}. Estude e revise os tópicos do edital verticalizado para aumentar sua competitividade!
                         </p>
                       </div>
                       <button 
@@ -1425,18 +1487,31 @@ export default function App() {
                     <GlassCard className="p-6">
                       <div className="flex items-center gap-2 mb-4">
                         <Wand2 size={16} className="text-indigo-400" />
-                        <h3 className="text-sm font-bold text-white">Processador Inteligente de Editais</h3>
+                        <h3 className="text-sm font-bold text-white">Adicionar Novo Edital via Oráculo</h3>
                       </div>
 
                       <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                        Cole o conteúdo programático ou o resumo de um edital de PDF abaixo. O "Mapeador de Editais" gerará instantaneamente o edital verticalizado, prioridades de matérias, regras da banca e cronograma de datas.
+                        Arraste e solte o arquivo PDF do edital ou cole o conteúdo programático/resumo abaixo. O Oráculo lerá e estruturará toda a sua trilha de forma inteligente.
                       </p>
 
-                      <div className="space-y-3">
+                      <div className="space-y-4">
+                        {/* Real Drag & Drop PDF upload area */}
+                        <div className="border-2 border-dashed border-white/10 rounded-xl p-5 flex flex-col items-center justify-center bg-slate-950/40 text-center relative hover:border-indigo-500/50 transition-all">
+                          <Upload size={24} className="text-indigo-400 mb-2" />
+                          <span className="text-xs font-bold text-white">Anexar PDF do Edital</span>
+                          <span className="text-[9px] text-slate-500 mt-1">Extração automática de datas, salários e tópicos</span>
+                          <input 
+                            type="file" 
+                            accept="application/pdf" 
+                            onChange={handlePdfUpload}
+                            className="absolute inset-0 opacity-0 cursor-pointer" 
+                          />
+                        </div>
+
                         <textarea
                           value={aiInputText}
                           onChange={(e) => setAiInputText(e.target.value)}
-                          placeholder="Cole o trecho do edital, regulamento ou conteúdo programático aqui..."
+                          placeholder="Cole o trecho do edital ou aguarde a extração de texto do PDF aqui..."
                           className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 h-32 resize-none"
                         />
 
@@ -1444,25 +1519,26 @@ export default function App() {
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-500 font-bold uppercase">Preencher Exemplo:</span>
                           <div className="flex gap-1.5">
-                            <button onClick={() => prefillSamplePdfText('pcdf')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">PCDF (Polícia)</button>
-                            <button onClick={() => prefillSamplePdfText('tjdft')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">TJDFT (Analista)</button>
+                            <button onClick={() => prefillSamplePreset('sedes')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">SEDES</button>
+                            <button onClick={() => prefillSamplePreset('der')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">DER</button>
+                            <button onClick={() => prefillSamplePreset('cldf')} className="px-2 py-1 bg-white/5 hover:bg-white/10 text-white border border-white/5 rounded-lg text-[10px] font-bold">CLDF</button>
                           </div>
                         </div>
 
                         <button
                           onClick={handleTriggerAiEditalAnalysis}
                           disabled={isAiProcessing}
-                          className="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
+                          className="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 mt-4"
                         >
                           {isAiProcessing ? (
                             <>
                               <RefreshCw size={14} className="animate-spin" />
-                              Escaneando PDF & Gerando Trilha...
+                              Calculando rotas espectrais de estudo...
                             </>
                           ) : (
                             <>
                               <Sparkles size={14} />
-                              Escanear e Importar Edital
+                              Processar Edital com Oráculo IA
                             </>
                           )}
                         </button>
@@ -1480,7 +1556,7 @@ export default function App() {
                     <GlassCard className="p-6">
                       <div className="flex items-center gap-2 mb-4 text-white">
                         <FileText size={16} className="text-indigo-400" />
-                        <h3 className="text-sm font-bold">Resumo Analítico: {activeExam.title}</h3>
+                        <h3 className="text-sm font-bold">Visão Geral do Edital {activeExam.title}</h3>
                       </div>
 
                       <div className="space-y-4 text-xs">
@@ -1511,43 +1587,34 @@ export default function App() {
                           <p className="text-[11px] text-slate-400 leading-relaxed mt-1">{activeExam.examSystemDescription}</p>
                         </div>
 
-                        {/* Countdown Timers */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="p-3 bg-indigo-500/10 rounded-xl border border-indigo-500/20 text-center">
-                            <span className="text-[10px] text-indigo-400 font-black block uppercase tracking-wider">Inscrições Encerram</span>
-                            <span className="text-xl font-mono font-black text-white block mt-1">{countdowns.regDays} DIAS</span>
-                          </div>
-                          <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-center">
-                            <span className="text-[10px] text-amber-500 font-black block uppercase tracking-wider">Contagem Regressiva Prova</span>
-                            <span className="text-xl font-mono font-black text-white block mt-1">{countdowns.testDays} DIAS</span>
-                          </div>
+                        {/* Banca profile strategy explanation */}
+                        <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-xl">
+                          <span className="text-[9px] text-indigo-400 font-black uppercase tracking-wider block mb-1">Análise da Banca ({activeExam.banca})</span>
+                          <p className="text-[11px] text-slate-400 leading-normal">{activeExam.bancaStyleExplanation}</p>
                         </div>
                       </div>
                     </GlassCard>
 
-                    {/* Comparative Similarity matrix */}
-                    {examOverlapAnalysis.length > 0 && (
-                      <GlassCard className="p-6">
-                        <div className="flex items-center gap-2 mb-4">
-                          <TrendingUp size={16} className="text-indigo-400" />
-                          <h3 className="text-sm font-bold text-white">Comparador de Similaridade Inteligente</h3>
-                        </div>
-                        <div className="space-y-4">
-                          {examOverlapAnalysis.map((item, idx) => (
-                            <div key={idx} className="p-3 bg-white/5 rounded-xl border border-white/5">
-                              <div className="flex justify-between items-center text-xs font-bold mb-1.5">
-                                <span className="text-white">vs. {item.targetTitle}</span>
-                                <span className="text-indigo-400 font-black">{item.overlapPercentage}% Sinergia</span>
-                              </div>
-                              <ProgressBar progress={item.overlapPercentage} color="#8b5cf6" />
-                              <div className="mt-2 text-[9px] text-slate-500 font-bold uppercase leading-relaxed">
-                                Matérias Reaproveitáveis: {item.commonSubjects.join(', ') || 'NENHUMA'}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </GlassCard>
-                    )}
+                    {/* Adaptive Mentoring based on Study Mode */}
+                    <GlassCard className="p-6">
+                      <div className="flex items-center gap-2 mb-3">
+                        {studyMode === 'iniciante' ? (
+                          <CheckCircle2 size={16} className="text-indigo-400" />
+                        ) : (
+                          <Target size={16} className="text-red-400" />
+                        )}
+                        <h4 className="text-xs font-black text-white uppercase">Plano de Ataque do Mentor</h4>
+                      </div>
+                      {studyMode === 'iniciante' ? (
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                          "Foque primeiro em entender os conceitos básicos. Complete 100% dos checklists em <strong>Compreensão de textos</strong>. Não se apresse com as revisões automáticas de 30 dias até dominar os princípios."
+                        </p>
+                      ) : (
+                        <p className="text-xs text-red-300 leading-relaxed">
+                          "Reta final agressiva! Você possui apenas {activeExam.approvalProbability}% de probabilidade estimada de aprovação. Priorize resolver questões de Direito Constitucional e Direito Administrativo da banca {activeExam.banca} hoje."
+                        </p>
+                      )}
+                    </GlassCard>
                   </div>
 
                   {/* Right: Interactive Granular Verticalized Checklist */}
@@ -1562,18 +1629,18 @@ export default function App() {
                           <p className="text-xs text-slate-500">Acompanhe seu progresso real por tópico de matéria</p>
                         </div>
                         <div className="text-[10px] text-slate-400 bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 self-start">
-                          Competitividade Esperada: <span className="text-emerald-400 font-black">{activeExam.approvalProbability}%</span>
+                          Probabilidade de Aprovação Estimada: <span className="text-emerald-400 font-black">{activeExam.approvalProbability}%</span>
                         </div>
                       </div>
 
                       {/* Map of Approval Indicator */}
                       <div className="mb-6 p-4 bg-slate-950/60 rounded-xl border border-white/5">
                         <div className="flex justify-between text-xs font-bold text-slate-400 mb-2">
-                          <span>Quanto falta para ficar competitivo?</span>
-                          <span>{activeExam.approvalProbability}% Preparado</span>
+                          <span>Nível Competitivo do Edital</span>
+                          <span>{activeExam.approvalProbability}% Competitivo</span>
                         </div>
                         <ProgressBar progress={activeExam.approvalProbability} color={activeExam.approvalProbability > 70 ? '#10b981' : activeExam.approvalProbability > 40 ? '#6366f1' : '#f59e0b'} />
-                        <span className="text-[10px] text-slate-500 block mt-1">Nível de corte estimado para vagas imediatas: 75% de acertos/cobertura de edital.</span>
+                        <span className="text-[10px] text-slate-500 block mt-1">Atingir +75% para entrar na zona crítica de aprovação de vagas.</span>
                       </div>
 
                       <div className="space-y-6">
@@ -1596,19 +1663,7 @@ export default function App() {
                                     className="p-3 bg-white/5 border border-white/5 hover:border-white/10 rounded-xl flex flex-col gap-3"
                                   >
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs text-slate-300 font-bold">{topic.topicName}</span>
-                                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
-                                            topic.priority === 'Alta' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 
-                                            topic.priority === 'Média' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
-                                            'bg-slate-500/10 text-slate-400 border border-white/5'
-                                          }`}>
-                                            {topic.priority} Prioridade
-                                          </span>
-                                        </div>
-                                        <p className="text-[10px] text-slate-500 font-bold">{topic.incidence}</p>
-                                      </div>
+                                      <span className="text-xs text-slate-300 font-bold max-w-sm">{topic.topicName}</span>
                                       
                                       {/* Interactive study actions */}
                                       <div className="flex items-center gap-2">
@@ -1645,24 +1700,12 @@ export default function App() {
                                       </div>
                                     </div>
 
-                                    {/* Granular interactive input logs per topic (Advaced info) */}
+                                    {/* Granular analytics details per topic (Advaced info) */}
                                     <div className="grid grid-cols-4 gap-2 text-[9px] text-slate-500 border-t border-white/5 pt-2 font-bold uppercase">
                                       <span>Questões: <strong className="text-white">{topic.questionsCount}</strong></span>
                                       <span>Acertos: <strong className="text-emerald-400">{topic.correctAnswers}</strong></span>
-                                      <span>Tempo: <strong className="text-white">{topic.timeInvested} min</strong></span>
                                       <span>Revisões: <strong className="text-indigo-400">{topic.revisionsCount}</strong></span>
-                                    </div>
-
-                                    {/* Quick Notes Input field */}
-                                    <div className="flex items-center gap-2 bg-slate-950/60 p-1.5 rounded-xl border border-white/5">
-                                      <Edit3 size={10} className="text-slate-500" />
-                                      <input 
-                                        type="text"
-                                        value={topic.notes}
-                                        placeholder="Caderno de erros / observações rápidas para este assunto..."
-                                        onChange={(e) => handleUpdateTopicNotes(activeExam.id, subj.subjectName, topic.topicName, e.target.value)}
-                                        className="bg-transparent border-none outline-none text-[10px] text-slate-300 placeholder-slate-600 flex-1"
-                                      />
+                                      <span className="truncate">Estudado: <strong className="text-white">{topic.lastStudied}</strong></span>
                                     </div>
                                   </div>
                                 ))}
@@ -1672,93 +1715,6 @@ export default function App() {
                         })}
                       </div>
                     </GlassCard>
-
-                    {/* REDAÇÃO E PROVAS DISCURSIVAS INTERACTIVE CORE */}
-                    {activeExam.essay?.hasEssay && (
-                      <GlassCard className="p-6">
-                        <div className="flex items-center gap-2 mb-4 border-b border-white/5 pb-3">
-                          <Edit3 size={18} className="text-indigo-400" />
-                          <h3 className="text-sm font-bold text-white">Redação & Provas Discursivas</h3>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Criteria & Topics suggestions */}
-                          <div className="space-y-4 text-xs">
-                            <div>
-                              <span className="text-[9px] text-indigo-400 font-black uppercase tracking-wider block mb-2">Critérios de Correção da Banca</span>
-                              <ul className="space-y-1.5 pl-3 list-disc text-slate-400">
-                                {activeExam.essay.criteria.map((c, idx) => <li key={idx}>{c}</li>)}
-                              </ul>
-                            </div>
-                            <div>
-                              <span className="text-[9px] text-amber-500 font-black uppercase tracking-wider block mb-2">Temas Quentes Sugeridos pela IA</span>
-                              <div className="space-y-1">
-                                {activeExam.essay.probableThemes.map((t, idx) => (
-                                  <div key={idx} className="p-2 bg-white/5 rounded-lg border border-white/5 text-[11px] text-slate-300">
-                                    {t}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Training log register */}
-                          <div className="p-4 bg-slate-950/60 rounded-2xl border border-white/5 space-y-3">
-                            <span className="text-[10px] text-white font-bold block uppercase tracking-wider">Registrar Novo Treino de Redação</span>
-                            <input 
-                              type="text" 
-                              value={newEssayTheme}
-                              onChange={(e) => setNewEssayTheme(e.target.value)}
-                              placeholder="Escreva o tema da redação..."
-                              className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-                            />
-                            <div className="grid grid-cols-2 gap-3">
-                              <input 
-                                type="number" 
-                                value={newEssayGrade}
-                                onChange={(e) => setNewEssayGrade(e.target.value)}
-                                placeholder={`Nota (Max ${activeExam.essay.maxGrade})`}
-                                className="bg-slate-900 border border-white/10 rounded-xl p-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
-                              />
-                              <button 
-                                onClick={() => handleAddEssayTraining(activeExam.id)}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs transition-all"
-                              >
-                                Logar Treino
-                              </button>
-                            </div>
-                            <textarea 
-                              value={newEssayNotes}
-                              onChange={(e) => setNewEssayNotes(e.target.value)}
-                              placeholder="Erros cometidos, observações do corretor ou correções gramaticais necessárias..."
-                              className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-xs text-white h-20 placeholder-slate-600 focus:outline-none focus:border-indigo-500 resize-none"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Recent trainings log output */}
-                        {activeExam.essay.trainings.length > 0 && (
-                          <div className="mt-6 border-t border-white/5 pt-4">
-                            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mb-3">Histórico de Redações</span>
-                            <div className="space-y-3">
-                              {activeExam.essay.trainings.map((t, idx) => (
-                                <div key={idx} className="p-3 bg-white/5 rounded-xl border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                                  <div>
-                                    <span className="text-[9px] text-slate-500 font-bold block mb-0.5">{t.date}</span>
-                                    <p className="text-white font-bold">{t.theme}</p>
-                                    {t.correctionsNotes && <p className="text-[11px] text-slate-400 italic mt-1 leading-normal">{t.correctionsNotes}</p>}
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="text-[9px] text-slate-500 block">Sua Nota</span>
-                                    <span className="text-emerald-400 font-black text-sm">{t.grade} / {activeExam.essay.maxGrade}</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </GlassCard>
-                    )}
                   </div>
 
                 </div>
@@ -1802,44 +1758,93 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Spaced repetition memory dashboards */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5">
+                    <span className="text-[9px] text-slate-500 font-black uppercase tracking-wider">Cartões Revisados</span>
+                    <h3 className="text-lg font-black text-white mt-1">{filteredCards.length} / {flashcards.length}</h3>
+                  </div>
+                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5">
+                    <span className="text-[9px] text-slate-500 font-black uppercase tracking-wider">Retenção Ativa Média</span>
+                    <h3 className="text-lg font-black text-emerald-400 mt-1">87%</h3>
+                  </div>
+                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5">
+                    <span className="text-[9px] text-slate-500 font-black uppercase tracking-wider">Revisões Atrasadas</span>
+                    <h3 className="text-lg font-black text-rose-400 mt-1">0</h3>
+                  </div>
+                  <div className="p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
+                    <span className="text-[9px] text-indigo-400 font-black uppercase tracking-wider">Ajuste de Memorização</span>
+                    <h3 className="text-lg font-black text-indigo-300 mt-1">Manual / Gemini</h3>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   {/* Left: Input upload and creator tool */}
                   <div className="lg:col-span-5 space-y-6">
                     <GlassCard className="p-6">
-                      <h3 className="text-sm font-bold text-white mb-3">Modelador de Cartões</h3>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Cpu size={16} className="text-indigo-400" />
+                        <h3 className="text-sm font-bold text-white">Criador Adaptativo de Cartões</h3>
+                      </div>
                       <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                        Cole resumos, leis ou apostilas para que o sistema gere cartões de memorização adaptativa.
+                        Cole resumos, leis, regimentos ou apostilas inteiras. O sistema transformará o material em cartões inteligentes de memorização.
                       </p>
 
                       <div className="space-y-4">
                         <textarea
                           value={ankiInputText}
                           onChange={(e) => setAnkiInputText(e.target.value)}
-                          placeholder="Cole o material para gerar cartões..."
+                          placeholder="Exemplo: CF Art. 5º, inciso IX - é livre a expressão da atividade intelectual, artística, científica..."
                           className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 h-32 resize-none"
                         />
 
                         <div className="flex justify-between items-center gap-4">
                           <div>
+                            <label className="text-[9px] text-slate-500 font-black uppercase tracking-wider block mb-1">Banca Estilo</label>
                             <select
                               value={selectedBanca}
                               onChange={(e) => setSelectedBanca(e.target.value)}
-                              className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 font-bold"
+                              className="bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-300"
                             >
-                              <option value="IADES">Estilo IADES (Literal)</option>
-                              <option value="CEBRASPE">Estilo CEBRASPE (C/E)</option>
-                              <option value="FGV">Estilo FGV (Prático)</option>
+                              <option value="IADES">IADES (Literal)</option>
+                              <option value="CEBRASPE">CEBRASPE (C/E)</option>
+                              <option value="FGV">FGV (Caso Prático)</option>
                             </select>
                           </div>
 
                           <button
                             onClick={handleGenerateAnkiCards}
                             disabled={isAnkiGenerating}
-                            className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
+                            className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 mt-4"
                           >
-                            {isAnkiGenerating ? 'Modelando Memória...' : 'Invocar Flashcards'}
+                            {isAnkiGenerating ? (
+                              <>
+                                <RefreshCw size={12} className="animate-spin" />
+                                Modelando Memória...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles size={12} />
+                                Invocar Flashcards com IA
+                              </>
+                            )}
                           </button>
                         </div>
+                      </div>
+                    </GlassCard>
+
+                    {/* AI Memory Tracker diagnosis feedback */}
+                    <GlassCard className="p-6 bg-gradient-to-br from-indigo-500/5 to-transparent border border-indigo-500/10">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Lightbulb size={16} className="text-amber-400 animate-bounce" />
+                        <h4 className="text-xs font-black text-white uppercase">IA Analista de Memorização</h4>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                        "Detectamos cansaço ou queda de retenção em Direito Administrativo. Seus flashcards serão apresentados de forma simplificada por 24h para reter a base legal sólida."
+                      </p>
+                      <div className="p-2.5 bg-slate-950/60 rounded-xl border border-white/5 flex items-center justify-between text-[10px] font-bold text-amber-500">
+                        <span>Frequência de Revisão</span>
+                        <span>Adaptada +12%</span>
                       </div>
                     </GlassCard>
                   </div>
@@ -1860,10 +1865,11 @@ export default function App() {
                           onClick={() => {
                             if (!isFlipped) setIsFlipped(true);
                           }}
-                          className={`min-h-[250px] bg-slate-950/80 border-2 rounded-[32px] p-8 flex flex-col justify-between relative cursor-pointer overflow-hidden transition-all duration-300 ${
+                          className={`min-h-[280px] bg-slate-950/80 border-2 rounded-[32px] p-8 flex flex-col justify-between relative cursor-pointer overflow-hidden transition-all duration-300 ${
                             isFlipped ? 'border-indigo-500 shadow-lg shadow-indigo-500/5' : 'border-white/5 hover:border-white/10'
                           }`}
                         >
+                          {/* Card metadata */}
                           <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold uppercase mb-4">
                             <span className="flex items-center gap-1">
                               <Bookmark size={10} className="text-indigo-400" />
@@ -1874,6 +1880,7 @@ export default function App() {
                             </span>
                           </div>
 
+                          {/* Front vs Back display */}
                           <div className="my-auto text-center">
                             <AnimatePresence mode="wait">
                               {!isFlipped ? (
@@ -1886,7 +1893,7 @@ export default function App() {
                                 >
                                   {activeCard.type === 'cloze' ? (
                                     <p 
-                                      className="text-sm sm:text-base text-white font-medium leading-relaxed"
+                                      className="text-base sm:text-lg text-white font-medium leading-relaxed"
                                       dangerouslySetInnerHTML={{ __html: renderClozeText(activeCard.front, clozeRevealed) }}
                                       onClick={(e) => {
                                         const target = e.target as HTMLElement;
@@ -1898,10 +1905,14 @@ export default function App() {
                                       }}
                                     />
                                   ) : (
-                                    <p className="text-sm sm:text-base text-white font-medium leading-relaxed">
+                                    <p className="text-base sm:text-lg text-white font-medium leading-relaxed">
                                       {activeCard.front}
                                     </p>
                                   )}
+                                  
+                                  <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-6 animate-pulse">
+                                    Clique no cartão para virar e ver gabarito
+                                  </p>
                                 </motion.div>
                               ) : (
                                 <motion.div
@@ -1911,17 +1922,21 @@ export default function App() {
                                   exit={{ opacity: 0 }}
                                   className="space-y-4 text-left"
                                 >
-                                  <p className="text-xs text-indigo-400 font-black uppercase tracking-wider block mb-1">Resposta</p>
-                                  <p className="text-sm sm:text-base text-slate-100 leading-relaxed font-semibold mb-3">
-                                    {activeCard.back}
-                                  </p>
+                                  <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+                                    <span className="text-[9px] text-indigo-400 font-black uppercase tracking-wider block mb-2">Resposta Consolidada</span>
+                                    <p className="text-sm sm:text-base text-slate-100 leading-relaxed font-semibold">
+                                      {activeCard.back}
+                                    </p>
+                                  </div>
 
                                   {activeCard.explanation && (
-                                    <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex items-start gap-2.5">
-                                      <Lightbulb size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                                    <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl flex items-start gap-3">
+                                      <Lightbulb size={16} className="text-amber-400 mt-0.5 shrink-0" />
                                       <div>
-                                        <span className="text-[9px] text-amber-500 font-black uppercase block">Explicação</span>
-                                        <p className="text-xs text-slate-400 leading-relaxed">{activeCard.explanation}</p>
+                                        <span className="text-[9px] text-amber-500 font-black uppercase tracking-wider block mb-0.5">Associações Mentais & Explicações</span>
+                                        <p className="text-xs text-slate-400 leading-normal">
+                                          {activeCard.explanation}
+                                        </p>
                                       </div>
                                     </div>
                                   )}
@@ -1930,9 +1945,12 @@ export default function App() {
                             </AnimatePresence>
                           </div>
 
-                          <p className="text-[9px] text-slate-500 text-center uppercase tracking-widest mt-4">
-                            {!isFlipped ? 'Clique para virar e gabaritar' : 'Avalie sua recordação abaixo'}
-                          </p>
+                          {/* Interval rating status */}
+                          <div className="flex justify-between items-center text-[10px] text-slate-500 font-bold mt-4 pt-4 border-t border-white/5">
+                            <span>Repetições: {activeCard.repetitions}</span>
+                            <span>Intervalo: {activeCard.intervalDays} dias</span>
+                            <span>Facilidade: {activeCard.easeFactor}x</span>
+                          </div>
                         </div>
 
                         {/* Adaptive SM2 SRS scoring triggers */}
@@ -1940,30 +1958,62 @@ export default function App() {
                           <div className="grid grid-cols-4 gap-3">
                             <button
                               onClick={() => handleRateAnkiCard(1)}
-                              className="p-3 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 text-red-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
+                              className="p-3 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 hover:border-red-500 text-red-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
                             >
                               <span className="font-black text-xs uppercase">Errei</span>
+                              <span className="text-[9px] text-red-500/80 font-bold block">Revisão (1 dia)</span>
                             </button>
                             <button
                               onClick={() => handleRateAnkiCard(2)}
-                              className="p-3 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 text-amber-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
+                              className="p-3 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 hover:border-amber-500 text-amber-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
                             >
                               <span className="font-black text-xs uppercase">Difícil</span>
+                              <span className="text-[9px] text-amber-500/80 font-bold block">Revisão (2 dias)</span>
                             </button>
                             <button
                               onClick={() => handleRateAnkiCard(3)}
-                              className="p-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
+                              className="p-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 hover:border-indigo-500 text-indigo-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
                             >
                               <span className="font-black text-xs uppercase">Bom</span>
+                              <span className="text-[9px] text-indigo-500/80 font-bold block">Revisão (4 dias)</span>
                             </button>
                             <button
                               onClick={() => handleRateAnkiCard(4)}
-                              className="p-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
+                              className="p-3 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 hover:border-emerald-500 text-emerald-400 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all"
                             >
                               <span className="font-black text-xs uppercase">Fácil</span>
+                              <span className="text-[9px] text-emerald-500/80 font-bold block">Revisão (8 dias)</span>
                             </button>
                           </div>
                         )}
+
+                        {/* Deck carousel controller */}
+                        <div className="flex justify-between items-center text-xs text-slate-500 px-2 font-bold">
+                          <span>Cartão {activeCardIndex + 1} de {filteredCards.length}</span>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => {
+                                setIsFlipped(false);
+                                setClozeRevealed(false);
+                                setActiveCardIndex(p => Math.max(0, p - 1));
+                              }}
+                              className="px-2.5 py-1 bg-white/5 border border-white/5 rounded-lg text-slate-400 hover:text-white"
+                            >
+                              Anterior
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setIsFlipped(false);
+                                setClozeRevealed(false);
+                                setActiveCardIndex(p => Math.min(filteredCards.length - 1, p + 1));
+                              }}
+                              className="px-2.5 py-1 bg-white/5 border border-white/5 rounded-lg text-slate-400 hover:text-white"
+                            >
+                              Próximo
+                            </button>
+                          </div>
+                        </div>
+
                       </div>
                     )}
                   </div>
@@ -2021,7 +2071,7 @@ export default function App() {
                             name="total" 
                             type="number" 
                             placeholder="0" 
-                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none" 
+                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" 
                           />
                         </div>
                         <div>
@@ -2030,13 +2080,13 @@ export default function App() {
                             name="correct" 
                             type="number" 
                             placeholder="0" 
-                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none" 
+                            className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" 
                           />
                         </div>
                       </div>
                       <button 
                         type="submit" 
-                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all"
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg"
                       >
                         Registrar no Diário
                       </button>
@@ -2055,11 +2105,15 @@ export default function App() {
                             <h4 className="text-md font-bold text-white mt-1.5">{sub.name}</h4>
                           </div>
                           <div className="text-left sm:text-right">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase">Taxa de Acertos</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Taxa de Acertos</p>
                             <p className="text-base font-bold text-emerald-400">{sub.accuracy}% de Precisão</p>
                           </div>
                         </div>
                         <div className="space-y-1.5">
+                          <div className="flex justify-between text-[10px] text-slate-500 font-bold uppercase">
+                            <span>Progresso Geral do Edital</span>
+                            <span>{sub.progress}%</span>
+                          </div>
                           <ProgressBar progress={sub.progress} color={sub.color} />
                         </div>
                       </GlassCard>
@@ -2116,10 +2170,25 @@ export default function App() {
                         <div className="w-2 h-2 rounded-full bg-amber-500 mt-1.5" />
                         <div>
                           <p className="text-xs font-bold text-white">Atenção em Consistência: Constitucional</p>
-                          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">Faz 3 dias que você não realiza treinos de "Direitos Fundamentais". Evite decaimento de memória espacial.</p>
+                          <p className="text-[11px] text-slate-400 leading-relaxed mt-1">Faz 3 dias que você não resolve sessões sobre "Direitos Fundamentais". Evite decaimento de memória espacial.</p>
                         </div>
                       </div>
                     </div>
+                  </GlassCard>
+
+                  <GlassCard className="p-6 bg-gradient-to-tr from-indigo-500/5 to-transparent">
+                    <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-1">
+                      <Sparkles size={16} className="text-indigo-400" /> Sugestão de Feitiço de Estudos
+                    </h3>
+                    <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                      Ative o Modo Foco Arcano de 25 minutos e foque na revisão do caderno de erros de Informática. Isso garantirá mais velocidade na sua jornada evolutiva.
+                    </p>
+                    <button 
+                      onClick={() => setActiveTab('timer')}
+                      className="px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 hover:bg-indigo-600/30 text-indigo-400 rounded-xl text-xs font-bold transition-all"
+                    >
+                      Canalizar Recomendação
+                    </button>
                   </GlassCard>
                 </div>
               </motion.div>
@@ -2168,7 +2237,7 @@ export default function App() {
 
                         <div className="flex items-center gap-6">
                           <div className="text-left sm:text-right">
-                            <p className="text-[10px] text-slate-500 font-bold uppercase">Desempenho</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Desempenho</p>
                             <p className="text-xs font-black text-emerald-400">{log.correct} acertos de {log.total} questões</p>
                           </div>
                           <div className="text-left sm:text-right">
